@@ -336,8 +336,8 @@ def main(measure=False,
         standard.export('out/hrir.wav', format='wav')
 
         # Write HeSuVi channel order HRIR
-        hesuvi_order = ['FL-left', 'FR-left', 'SL-left', 'SR-left', 'BL-left', 'BR-left', 'FC-left', 'FL-right',
-                        'FR-right', 'SL-right', 'SR-right', 'BL-right', 'BR-right', 'FC-right']
+        hesuvi_order = ['FL-left', 'FR-left', 'SL-left', 'SR-left', 'BL-left', 'BR-left', 'FC-left', 'FR-right',
+                        'FL-right', 'SR-right', 'SL-right', 'BR-right', 'BL-right', 'FC-right']
         hesuvi = AudioSegment.from_mono_audiosegments(*[padded[IR_ORDER.index(ch)] for ch in hesuvi_order])
         hesuvi.export('out/hesuvi.wav', format='wav')
 
