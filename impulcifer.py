@@ -9,6 +9,12 @@ import argparse
 # https://en.wikipedia.org/wiki/Surround_sound
 CHANNELS = ['FL', 'FR', 'FC', 'BL', 'BR', 'SL', 'SR']
 
+# Each channel, left and right
+IR_ORDER = []
+for _ch in CHANNELS:
+    IR_ORDER.append(_ch+'-left')
+    IR_ORDER.append(_ch+'-right')
+
 # See README for details how these were obtained
 DELAYS = {
     'FL': 0.107,
@@ -233,10 +239,24 @@ def main(measure=False,
     # Pre-processing
     if preprocess:
         # Split recording WAV file into individual mono tracks
-        tracks = split_recording(recording, test, speakers=speakers, silence_length=silence_length)
+        sweeps = split_recording(recording, test, speakers=speakers, silence_length=silence_length)
+
+        # Reorder tracks
+        sweeps = sweeps.split_to_mono()
+        sweep_order = []
+        for speaker in speakers:
+            sweep_order.append(speaker + '-left')
+            sweep_order.append(speaker + '-right')
+        reordered = []
+        for ch in sweep_order:
+            if ch not in IR_ORDER:
+                reordered.append(AudioSegment.silent(len(sweeps[0]), sweeps[0].frame_rate))
+            else:
+                reordered.append(sweeps[IR_ORDER.index(ch)])
+        sweeps = AudioSegment.from_mono_audiosegments(*reordered)
 
         # Plot waveforms for inspection
-        data = np.vstack([tr.get_array_of_samples() for tr in tracks.split_to_mono()])
+        data = np.vstack([tr.get_array_of_samples() for tr in sweeps.split_to_mono()])
         for j in range(4):
             plt.subplot(4, 1, j + 1)
             plot_sweep(
@@ -248,9 +268,9 @@ def main(measure=False,
         plt.show()
 
         # Write multi-channel WAV file with sine sweeps
-        tracks.export('out/preprocessed.wav', format='wav')
+        sweeps.export('out/preprocessed.wav', format='wav')
         # Write multi-channel WAV file with test track duplicated. Useful for Voxengo deconvolver.
-        test_duplicated = [test for _ in range(tracks.channels)]
+        test_duplicated = [test for _ in range(sweeps.channels)]
         AudioSegment.from_mono_audiosegments(*test_duplicated).export('out/tests.wav', format='wav')
 
     # Deconvolution
@@ -290,13 +310,9 @@ def main(measure=False,
         standard.export('out/hrir.wav', format='wav')
 
         # Write HeSuVi channel order HRIR
-        standard_order = []
-        for speaker in CHANNELS:
-            standard_order.append(speaker+'-left')
-            standard_order.append(speaker+'-right')
         hesuvi_order = ['FL-left', 'FR-left', 'SL-left', 'SR-left', 'BL-left', 'BR-left', 'FC-left', 'FL-right',
                         'FR-right', 'SL-right', 'SR-right', 'BL-right', 'BR-right', 'FC-right']
-        hesuvi = AudioSegment.from_mono_audiosegments(*[padded[standard_order.index(ch)] for ch in hesuvi_order])
+        hesuvi = AudioSegment.from_mono_audiosegments(*[padded[IR_ORDER.index(ch)] for ch in hesuvi_order])
         hesuvi.export('out/hesuvi.wav', format='wav')
 
 
