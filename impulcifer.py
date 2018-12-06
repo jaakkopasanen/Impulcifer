@@ -16,14 +16,15 @@ for _ch in CHANNELS:
     IR_ORDER.append(_ch+'-right')
 
 # See README for details how these were obtained
+# Two samples (@48kHz) added to beginning
 DELAYS = {
-    'FL': 0.107,
-    'FR': 0.107,
-    'FC': 0.214,
-    'BL': 0.107,  # TODO: Confirm this
-    'BR': 0.107,  # TODO: Confirm this
-    'SL': 0.0,
-    'SR': 0.0,
+    'FL': 0.1487,
+    'FR': 0.1487,
+    'FC': 0.2557,
+    'BL': 0.1487,  # TODO: Confirm this
+    'BR': 0.1487,  # TODO: Confirm this
+    'SL': 0.0417,
+    'SR': 0.0417,
 }
 
 
@@ -36,7 +37,7 @@ def fft(x, fs):
     return f[0:int(np.ceil(nfft/2))], X_mag[0:int(np.ceil(nfft/2))]
 
 
-def normalize(x):
+def to_float(x):
     """Normalizes numpy array into range -1..1
 
     Args:
@@ -94,7 +95,7 @@ def split_recording(recording, test_signal, speakers, silence_length=2.0):
 
     """
     # Number of speakers in each track
-    n_speakers = len(speakers) / (recording.channels / 2)
+    n_speakers = len(speakers) // (recording.channels // 2)
 
     # Split sections in time to columns
     columns = []
@@ -133,7 +134,7 @@ def crop_ir_tail(response):
     n = response.frame_rate // 1000  # Window size
     for j in range(1, len(response)):
         window = data[(j - 1) * n:j * n]  # Select window
-        window = normalize(window)  # Normalize between -1..1
+        window = to_float(window)  # Normalize between -1..1
         rms.append(np.sqrt(np.mean(np.square(window))))  # RMS
 
     # Detect noise floor
@@ -164,10 +165,13 @@ def crop_ir_head(left, right, speaker):
         Cropped left and right AudioSegments as a tuple (left, right)
     """
     # Peaks
+    # FIXME: First peak instead of max
     peak_left = np.argmax(left.get_array_of_samples())
     peak_right = np.argmax(right.get_array_of_samples())
+
     # Inter aural time difference
     itd = np.abs(peak_left - peak_right)
+
     # Speaker channel delay
     delay = DELAYS[speaker]
     if peak_left < peak_right:
@@ -182,6 +186,11 @@ def crop_ir_head(left, right, speaker):
             raise ValueError(speaker, 'impulse response has lower delay to right ear than to left.')
         left = left[peak_left-(delay+itd):]
         right = right[peak_right-delay:]
+
+    # Make sure impulse response starts from silence
+    left = left.fade_in(2/left.frame_rate/1000)
+    right = right.fade_in(2/right.frame_rate/1000)
+
     return left, right
 
 
@@ -248,24 +257,27 @@ def main(measure=False,
             sweep_order.append(speaker + '-left')
             sweep_order.append(speaker + '-right')
         reordered = []
-        for ch in sweep_order:
-            if ch not in IR_ORDER:
+        for ch in IR_ORDER:
+            if ch not in sweep_order:
                 reordered.append(AudioSegment.silent(len(sweeps[0]), sweeps[0].frame_rate))
             else:
-                reordered.append(sweeps[IR_ORDER.index(ch)])
+                reordered.append(sweeps[sweep_order.index(ch)])
         sweeps = AudioSegment.from_mono_audiosegments(*reordered)
 
-        # Plot waveforms for inspection
-        data = np.vstack([tr.get_array_of_samples() for tr in sweeps.split_to_mono()])
-        for j in range(4):
-            plt.subplot(4, 1, j + 1)
-            plot_sweep(
-                normalize(data[j, :]),
-                recording.frame_rate,
-                name='Speaker {s:d} - {mic}'.format(s=int(j/2+1), mic='right' if j % 2 else 'left')
-            )
-        plt.xlabel('Time (s)')
-        plt.show()
+        # Normalize to -0.1 dB
+        sweeps = sweeps.normalize()
+
+        # # Plot waveforms for inspection
+        # data = np.vstack([tr.get_array_of_samples() for tr in sweeps.split_to_mono()])
+        # for j in range(data.shape[0]):
+        #     plt.subplot(data.shape[0], 1, j + 1)
+        #     plot_sweep(
+        #         normalize(data[j, :]),
+        #         recording.frame_rate,
+        #         name=IR_ORDER[j]
+        #     )
+        # plt.xlabel('Time (s)')
+        # plt.show()
 
         # Write multi-channel WAV file with sine sweeps
         sweeps.export('out/preprocessed.wav', format='wav')
@@ -293,7 +305,7 @@ def main(measure=False,
             left = crop_ir_tail(responses[i])
             right = crop_ir_tail(responses[i+1])
             # Crop head
-            speaker = speakers[i*2]
+            speaker = CHANNELS[i//2]
             left, right = crop_ir_head(left, right, speaker)
             cropped.append(left)
             cropped.append(right)
@@ -337,7 +349,9 @@ def create_cli():
     arg_parser.add_argument('--silence_length', type=float,
                             help='Length of silence in the beginning, end and between recordings.')
     # TODO: filtfilt
-    return vars(arg_parser.parse_args())
+    args = vars(arg_parser.parse_args())
+    args['speakers'] = args['speakers'].upper().split(',')
+    return args
 
 
 if __name__ == '__main__':
