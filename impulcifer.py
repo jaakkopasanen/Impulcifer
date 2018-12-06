@@ -5,6 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pydub import AudioSegment
 import argparse
+from scipy import signal
 
 # https://en.wikipedia.org/wiki/Surround_sound
 CHANNELS = ['FL', 'FR', 'FC', 'BL', 'BR', 'SL', 'SR']
@@ -165,10 +166,10 @@ def crop_ir_head(left, right, speaker):
         Cropped left and right AudioSegments as a tuple (left, right)
     """
     # Peaks
-    # FIXME: First peak instead of max
-    peak_left = np.argmax(left.get_array_of_samples())
-    peak_right = np.argmax(right.get_array_of_samples())
-
+    peak_left, _ = signal.find_peaks(to_float(np.array(left.normalize().get_array_of_samples())), height=0.1)
+    peak_left = peak_left[0] / left.frame_rate * 1000
+    peak_right, _ = signal.find_peaks(to_float(np.array(right.normalize().get_array_of_samples())), height=0.1)
+    peak_right = peak_right[0] / right.frame_rate * 1000
     # Inter aural time difference
     itd = np.abs(peak_left - peak_right)
 
@@ -190,6 +191,10 @@ def crop_ir_head(left, right, speaker):
     # Make sure impulse response starts from silence
     left = left.fade_in(2/left.frame_rate/1000)
     right = right.fade_in(2/right.frame_rate/1000)
+
+    # Crop to integer number of samples
+    left = left[:(int(len(left) / 1000 * left.frame_rate) - 1) / left.frame_rate * 1000]
+    right = right[:(int(len(right) / 1000 * right.frame_rate) - 1) / right.frame_rate * 1000]
 
     return left, right
 
@@ -296,26 +301,35 @@ def main(measure=False,
         # Read WAV file
         if type(responses) == str:
             responses = AudioSegment.from_wav(responses)
+        fs = responses.frame_rate
         # Crop
         cropped = []
         i = 0
         responses = responses.split_to_mono()
         while i < len(responses):
-            # Crop tails
-            left = crop_ir_tail(responses[i])
-            right = crop_ir_tail(responses[i+1])
-            # Crop head
-            speaker = CHANNELS[i//2]
-            left, right = crop_ir_head(left, right, speaker)
-            cropped.append(left)
-            cropped.append(right)
+            left = responses[i]
+            right = responses[i+1]
+            if left.rms > 0 and right.rms > 0:
+                # Crop tails
+                left = crop_ir_tail(left)
+                right = crop_ir_tail(right)
+                # Crop head
+                speaker = CHANNELS[i//2]
+                left, right = crop_ir_head(left, right, speaker)
+                cropped.append(left)
+                cropped.append(right)
+            else:
+                cropped.append(AudioSegment.empty())  # For left
+                cropped.append(AudioSegment.empty())  # For right
             i += 2
 
         # Zero pad to longest
-        max_len = max([len(ir) for ir in cropped])
+        max_samples = max([len(ir.get_array_of_samples()) for ir in cropped])
         padded = []
         for response in cropped:
-            padded.append(response + AudioSegment.silent(max_len - len(response), response.frame_rate))
+            silence = (max_samples - len(response.get_array_of_samples())) / fs * 1000
+            seg = response + AudioSegment.silent(silence, fs)
+            padded.append(seg)
 
         # Write standard channel order HRIR
         standard = AudioSegment.from_mono_audiosegments(*padded)
