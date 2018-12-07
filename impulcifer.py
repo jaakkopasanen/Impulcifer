@@ -235,11 +235,11 @@ def main(measure=False,
             raise TypeError('Parameter "responses" is required for post-processing when not doing deconvolution.')
 
     # Read files
-    if recording is not None:
+    if preprocess and recording is not None:
         recording = AudioSegment.from_wav(recording)
-    if test is not None:
+    if (preprocess or deconvolve) and test is not None:
         test = AudioSegment.from_wav(test)
-    if responses is not None:
+    if postprocess and responses is not None:
         responses = AudioSegment.from_wav(responses)
 
     if not os.path.isdir('out'):
@@ -270,7 +270,7 @@ def main(measure=False,
         sweeps = AudioSegment.from_mono_audiosegments(*reordered)
 
         # Normalize to -0.1 dB
-        sweeps = sweeps.normalize()
+        #sweeps = sweeps.normalize()
 
         # # Plot waveforms for inspection
         # data = np.vstack([tr.get_array_of_samples() for tr in sweeps.split_to_mono()])
@@ -309,7 +309,7 @@ def main(measure=False,
         while i < len(responses):
             left = responses[i]
             right = responses[i+1]
-            if left.rms > 0 and right.rms > 0:
+            if left.rms > 2 and right.rms > 2:
                 # Crop tails
                 left = crop_ir_tail(left)
                 right = crop_ir_tail(right)
@@ -327,8 +327,16 @@ def main(measure=False,
         max_samples = max([len(ir.get_array_of_samples()) for ir in cropped])
         padded = []
         for response in cropped:
-            silence = (max_samples - len(response.get_array_of_samples())) / fs * 1000
-            seg = response + AudioSegment.silent(silence, fs)
+            response_samples = np.array(response.get_array_of_samples())
+            silence_length = max_samples - len(response_samples)
+            silence = np.zeros(silence_length, dtype=response_samples.dtype)
+            zero_padded = np.concatenate([response_samples, silence])
+            seg = AudioSegment(
+                zero_padded.tobytes(),
+                sample_width=response.sample_width,
+                frame_rate=fs,
+                channels=1
+            )
             padded.append(seg)
 
         # Write standard channel order HRIR
@@ -336,8 +344,8 @@ def main(measure=False,
         standard.export('out/hrir.wav', format='wav')
 
         # Write HeSuVi channel order HRIR
-        hesuvi_order = ['FL-left', 'FR-left', 'SL-left', 'SR-left', 'BL-left', 'BR-left', 'FC-left', 'FR-right',
-                        'FL-right', 'SR-right', 'SL-right', 'BR-right', 'BL-right', 'FC-right']
+        hesuvi_order = ['FL-left', 'FL-right', 'SL-left', 'SL-right', 'BL-left', 'BL-right', 'FC-left', 'FR-right',
+                        'FR-left', 'SR-right', 'SR-left', 'BR-right', 'BR-left', 'FC-right']
         hesuvi = AudioSegment.from_mono_audiosegments(*[padded[IR_ORDER.index(ch)] for ch in hesuvi_order])
         hesuvi.export('out/hesuvi.wav', format='wav')
 
