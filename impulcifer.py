@@ -47,6 +47,8 @@ def to_float(x):
     Returns:
         Numpy array with values in range -1..1
     """
+    if type(x) != np.array:
+        x = np.array(x)
     dtype = x.dtype
     x = x.astype('float64')
     if dtype == 'int32':
@@ -199,6 +201,19 @@ def crop_ir_head(left, right, speaker):
     return left, right
 
 
+def zero_pad(seg, max_samples, fs):
+    seg_samples = np.array(seg.get_array_of_samples())
+    silence_length = max_samples - len(seg_samples)
+    silence = np.zeros(silence_length, dtype=seg_samples.dtype)
+    zero_padded = np.concatenate([seg_samples, silence])
+    return AudioSegment(
+        zero_padded.tobytes(),
+        sample_width=seg.sample_width,
+        frame_rate=fs,
+        channels=1
+    )
+
+
 def main(measure=False,
          preprocess=False,
          deconvolve=False,
@@ -211,8 +226,6 @@ def main(measure=False,
     """"""
     if measure:
         raise NotImplementedError('Measurement is not yet implemented.')
-    if deconvolve:
-        raise NotImplementedError('Deconvolution is not yet implemented.')
 
     # Parameter checks
     if preprocess or postprocess:
@@ -267,10 +280,10 @@ def main(measure=False,
                 reordered.append(AudioSegment.silent(len(sweeps[0]), sweeps[0].frame_rate))
             else:
                 reordered.append(sweeps[sweep_order.index(ch)])
-        sweeps = AudioSegment.from_mono_audiosegments(*reordered)
+        preprocessed = AudioSegment.from_mono_audiosegments(*reordered)
 
         # Normalize to -0.1 dB
-        #sweeps = sweeps.normalize()
+        preprocessed = sweeps.normalize()
 
         # # Plot waveforms for inspection
         # data = np.vstack([tr.get_array_of_samples() for tr in sweeps.split_to_mono()])
@@ -285,16 +298,49 @@ def main(measure=False,
         # plt.show()
 
         # Write multi-channel WAV file with sine sweeps
-        sweeps.export('out/preprocessed.wav', format='wav')
+        preprocessed.export('out/preprocessed.wav', format='wav')
         # Write multi-channel WAV file with test track duplicated. Useful for Voxengo deconvolver.
-        test_duplicated = [test for _ in range(sweeps.channels)]
+        test_duplicated = [test for _ in range(preprocessed.channels)]
         AudioSegment.from_mono_audiosegments(*test_duplicated).export('out/tests.wav', format='wav')
 
     # Deconvolution
     if deconvolve:  # TODO
         # Make sure sampling rates match
-        if recording.frame_rate != test.frame_rate:
+        if preprocessed.frame_rate != test.frame_rate:
             raise ValueError('Sampling frequencies of test tone and recording must match!')
+
+        # Pad test signal to pre-processed recording length with zeros
+        test_padded = zero_pad(
+            test,
+            len(preprocessed.split_to_mono()[0].get_array_of_samples()),
+            preprocessed.frame_rate
+        )
+
+        # Fourier transform of test signal
+        X = np.fft.fft(test_padded.get_array_of_samples())
+
+        responses = []
+        for s in preprocessed.split_to_mono():
+            # Division in frequency domain is deconvolution in time domain
+            Y = np.fft.fft(s.get_array_of_samples())
+            H = Y / X
+            h = np.fft.ifft(H)
+            h = np.real(h)
+            h *= 2**15
+
+            #plt.plot(h)
+            #plt.show()
+
+            # Add to responses
+            responses.append(AudioSegment(
+                h.astype('int16').tobytes(),
+                frame_rate=preprocessed.frame_rate,
+                sample_width=2,
+                channels=1
+            ))
+        responses = AudioSegment.from_mono_audiosegments(*responses)
+
+        responses.export('out/responses.wav', format='wav')
 
     # Post-processing for setting channel delays, channel order and cropping out the impulse response tails
     if postprocess:
@@ -327,17 +373,7 @@ def main(measure=False,
         max_samples = max([len(ir.get_array_of_samples()) for ir in cropped])
         padded = []
         for response in cropped:
-            response_samples = np.array(response.get_array_of_samples())
-            silence_length = max_samples - len(response_samples)
-            silence = np.zeros(silence_length, dtype=response_samples.dtype)
-            zero_padded = np.concatenate([response_samples, silence])
-            seg = AudioSegment(
-                zero_padded.tobytes(),
-                sample_width=response.sample_width,
-                frame_rate=fs,
-                channels=1
-            )
-            padded.append(seg)
+            padded.append(zero_pad(response, max_samples, fs))
 
         # Write standard channel order HRIR
         standard = AudioSegment.from_mono_audiosegments(*padded)
