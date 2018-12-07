@@ -3,9 +3,9 @@
 import os
 import numpy as np
 import matplotlib.pyplot as plt
-from pydub import AudioSegment
+from pydub import AudioSegment, effects
 import argparse
-from scipy import signal
+from scipy import signal, linalg
 
 # https://en.wikipedia.org/wiki/Surround_sound
 CHANNELS = ['FL', 'FR', 'FC', 'BL', 'BR', 'SL', 'SR']
@@ -214,6 +214,35 @@ def zero_pad(seg, max_samples, fs):
     )
 
 
+def deconv(y, x, domain='time'):
+    """Calculates deconvolution in frequency or time domain.
+
+    Args:
+        y: Recording as numpy array
+        x: Test signal as numpy array
+        domain: "time" or "frequency"
+
+    Returns:
+        Impulse response
+    """
+    if domain == 'frequency':
+        # Division in frequency domain is deconvolution in time domain
+        X = np.fft.fft(x)
+        Y = np.fft.fft(np.array(y.get_array_of_samples(), dtype='float64'))
+        H = Y / X
+        h = np.fft.ifft(H)
+        h = np.real(h)
+    elif domain == 'time':
+        # Toepliz convolution: https://en.wikipedia.org/wiki/Toeplitz_matrix
+        # Create zero padded matrix where each column is shifted one step down
+        print(len(x), (len(x)*2-1)*len(x)*8/1024/1024/1024)
+        X = linalg.toeplitz(x, np.concatenate((x[0:1], np.zeros(len(x) - 1))))
+        h = np.matmul(np.matmul(np.linalg.inv(np.matmul(np.transpose(X), X)), np.transpose(X)), y)
+    else:
+        raise ValueError('"{}" is not one of the supported "domain" parameter values "time" or "frequency".')
+    return h
+
+
 def main(measure=False,
          preprocess=False,
          deconvolve=False,
@@ -283,7 +312,7 @@ def main(measure=False,
         preprocessed = AudioSegment.from_mono_audiosegments(*reordered)
 
         # Normalize to -0.1 dB
-        preprocessed = sweeps.normalize()
+        preprocessed = preprocessed.normalize()
 
         # # Plot waveforms for inspection
         # data = np.vstack([tr.get_array_of_samples() for tr in sweeps.split_to_mono()])
@@ -317,27 +346,23 @@ def main(measure=False,
         )
 
         # Fourier transform of test signal
-        X = np.fft.fft(test_padded.get_array_of_samples())
+        x = np.array(test_padded.get_array_of_samples(), dtype='float64')
 
         responses = []
         for s in preprocessed.split_to_mono():
-            # Division in frequency domain is deconvolution in time domain
-            Y = np.fft.fft(s.get_array_of_samples())
-            H = Y / X
-            h = np.fft.ifft(H)
-            h = np.real(h)
-            h *= 2**15
+            if s.rms > 2:
+                # Do deconvolution
+                h = deconv(s, x, domain='frequency')
 
-            #plt.plot(h)
-            #plt.show()
-
-            # Add to responses
-            responses.append(AudioSegment(
-                h.astype('int16').tobytes(),
-                frame_rate=preprocessed.frame_rate,
-                sample_width=2,
-                channels=1
-            ))
+                # Add to responses
+                responses.append(AudioSegment(
+                    np.multiply(h, 2**31).astype('int32').tobytes(),
+                    frame_rate=preprocessed.frame_rate,
+                    sample_width=4,
+                    channels=1
+                ))
+            else:
+                responses.append(s)
         responses = AudioSegment.from_mono_audiosegments(*responses)
 
         responses.export('out/responses.wav', format='wav')
@@ -365,8 +390,8 @@ def main(measure=False,
                 cropped.append(left)
                 cropped.append(right)
             else:
-                cropped.append(AudioSegment.empty())  # For left
-                cropped.append(AudioSegment.empty())  # For right
+                cropped.append(left[:1])  # For left
+                cropped.append(right[:1])  # For right
             i += 2
 
         # Zero pad to longest
