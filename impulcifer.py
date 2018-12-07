@@ -228,16 +228,19 @@ def deconv(y, x, domain='time'):
     if domain == 'frequency':
         # Division in frequency domain is deconvolution in time domain
         X = np.fft.fft(x)
-        Y = np.fft.fft(np.array(y.get_array_of_samples(), dtype='float64'))
+        Y = np.fft.fft(y)
         H = Y / X
         h = np.fft.ifft(H)
         h = np.real(h)
     elif domain == 'time':
         # Toepliz convolution: https://en.wikipedia.org/wiki/Toeplitz_matrix
         # Create zero padded matrix where each column is shifted one step down
-        print(len(x), (len(x)*2-1)*len(x)*8/1024/1024/1024)
         X = linalg.toeplitz(x, np.concatenate((x[0:1], np.zeros(len(x) - 1))))
         h = np.matmul(np.matmul(np.linalg.inv(np.matmul(np.transpose(X), X)), np.transpose(X)), y)
+        # h = linalg.solve_toeplitz(
+        #     (x, np.concatenate((x[0:1], np.zeros(len(x) - 1)))),
+        #     y
+        # )
     else:
         raise ValueError('"{}" is not one of the supported "domain" parameter values "time" or "frequency".')
     return h
@@ -346,13 +349,18 @@ def main(measure=False,
         )
 
         # Fourier transform of test signal
-        x = np.array(test_padded.get_array_of_samples(), dtype='float64')
+        x = np.array(test_padded.get_array_of_samples(), dtype='float32')
 
         responses = []
         for s in preprocessed.split_to_mono():
             if s.rms > 2:
                 # Do deconvolution
-                h = deconv(s, x, domain='frequency')
+
+                h = deconv(
+                    np.array(s.get_array_of_samples(), dtype='float32'),
+                    x,
+                    domain='frequency'
+                )
 
                 # Add to responses
                 responses.append(AudioSegment(
