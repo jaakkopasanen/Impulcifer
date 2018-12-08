@@ -98,13 +98,13 @@ def split_recording(recording, test_signal, speakers, silence_length=2.0):
 
     """
     # Number of speakers in each track
-    n_speakers = len(speakers) // (recording.channels // 2)
+    n_columns = round(len(speakers) / (recording.channels // 2))
 
     # Split sections in time to columns
     columns = []
     ms = silence_length*1000 + len(test_signal)
     remainder = recording[silence_length*1000:]
-    for _ in range(n_speakers):
+    for _ in range(n_columns):
         columns.append(remainder[:ms].split_to_mono())  # Add list of mono channel AudioSegments
         remainder = remainder[ms:]  # Cut to the beginning of next signal
 
@@ -431,7 +431,7 @@ def main(measure=False,
             f, m = fft(ch.get_array_of_samples(), headphones.frame_rate)
             lines = ['frequency,raw']
             for j in range(len(f)):
-                if f == 0.0:
+                if f[j] == 0.0:
                     continue
                 lines.append('{f:.2f},{m:.2f}'.format(f=f[j], m=m[j]))
             with open('out/headphones-{}.csv'.format('left' if i == 0 else 'right'), 'w') as file:
