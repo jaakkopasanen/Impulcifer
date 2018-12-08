@@ -32,7 +32,7 @@ DELAYS = {
 def fft(x, fs):
     nfft = len(x)
     df = fs / nfft
-    f = np.arange(0, fs - df, fs / nfft)
+    f = np.arange(0, fs - df, df)
     X = np.fft.fft(x)
     X_mag = 20 * np.log10(np.abs(X))
     return f[0:int(np.ceil(nfft/2))], X_mag[0:int(np.ceil(nfft/2))]
@@ -250,11 +250,13 @@ def main(measure=False,
          preprocess=False,
          deconvolve=False,
          postprocess=False,
+         equalize=False,
          recording=None,
          test=None,
          responses=None,
          speakers=None,
-         silence_length=None):
+         silence_length=None,
+         headphones=None):
     """"""
     if measure:
         raise NotImplementedError('Measurement is not yet implemented.')
@@ -278,6 +280,9 @@ def main(measure=False,
     if postprocess:
         if not (responses or deconvolve):
             raise TypeError('Parameter "responses" is required for post-processing when not doing deconvolution.')
+    if equalize:
+        if not headphones:
+            raise TypeError('Parameter "headphones" is required for equalization.')
 
     # Read files
     if preprocess and recording is not None:
@@ -352,12 +357,12 @@ def main(measure=False,
         x = np.array(test_padded.get_array_of_samples(), dtype='float32')
 
         responses = []
-        for s in preprocessed.split_to_mono():
-            if s.rms > 2:
+        for lines in preprocessed.split_to_mono():
+            if lines.rms > 2:
                 # Do deconvolution
 
                 h = deconv(
-                    np.array(s.get_array_of_samples(), dtype='float32'),
+                    np.array(lines.get_array_of_samples(), dtype='float32'),
                     x,
                     domain='frequency'
                 )
@@ -370,7 +375,7 @@ def main(measure=False,
                     channels=1
                 ))
             else:
-                responses.append(s)
+                responses.append(lines)
         responses = AudioSegment.from_mono_audiosegments(*responses)
 
         responses.export('out/responses.wav', format='wav')
@@ -418,6 +423,20 @@ def main(measure=False,
         hesuvi = AudioSegment.from_mono_audiosegments(*[padded[IR_ORDER.index(ch)] for ch in hesuvi_order])
         hesuvi.export('out/hesuvi.wav', format='wav')
 
+    if equalize:
+        # Read WAV file
+        if type(headphones) == str:
+            headphones = AudioSegment.from_wav(headphones)
+        for i, ch in enumerate(headphones.split_to_mono()):
+            f, m = fft(ch.get_array_of_samples(), headphones.frame_rate)
+            lines = ['frequency,raw']
+            for j in range(len(f)):
+                if f == 0.0:
+                    continue
+                lines.append('{f:.2f},{m:.2f}'.format(f=f[j], m=m[j]))
+            with open('out/headphones-{}.csv'.format('left' if i == 0 else 'right'), 'w') as file:
+                file.write('\n'.join(lines))
+
 
 def create_cli():
     arg_parser = argparse.ArgumentParser()
@@ -429,6 +448,8 @@ def create_cli():
     arg_parser.add_argument('--deconvolve', action='store_true', help='Run deconvolution?')
     arg_parser.add_argument('--postprocess', action='store_true',
                             help='Post-process impulse responses to match channel delays and crop tails?')
+    arg_parser.add_argument('--equalize', action='store_true',
+                            help='Produce CSV file for AutoEQ from headphones sine sweep recordgin?')
     arg_parser.add_argument('--recording', type=str, help='File path to sine sweep recording.')
     arg_parser.add_argument('--responses', type=str, help='File path to impulse responses.')
     arg_parser.add_argument('--test', type=str, help='File path to sine sweep test signal.')
@@ -439,6 +460,8 @@ def create_cli():
                                  '"SL" (side left), "SR" (side right)."')
     arg_parser.add_argument('--silence_length', type=float,
                             help='Length of silence in the beginning, end and between recordings.')
+    arg_parser.add_argument('--headphones', type=str,
+                            help='File path to headphones sine sweep recording. Stereo WAV file is expected.')
     # TODO: filtfilt
     args = vars(arg_parser.parse_args())
     args['speakers'] = args['speakers'].upper().split(',')

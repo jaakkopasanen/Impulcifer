@@ -9,7 +9,7 @@ from impulcifer import fft
 
 
 def main():
-    Fs, data = wavfile.read('data/hp_sweep_stereo.wav')
+    Fs, data = wavfile.read('data/HE400S.wav')
     data = np.array(data)
     print(Fs)
     print(data.shape)
