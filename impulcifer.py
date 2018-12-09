@@ -251,6 +251,7 @@ def main(measure=False,
          deconvolve=False,
          postprocess=False,
          equalize=False,
+         dir_path=None,
          recording=None,
          test=None,
          responses=None,
@@ -261,28 +262,40 @@ def main(measure=False,
     if measure:
         raise NotImplementedError('Measurement is not yet implemented.')
 
+    out_dir = 'out'
+    if dir_path and os.path.isdir(dir_path):
+        out_dir = dir_path
+        if not recording and os.path.isfile(os.path.join(dir_path, 'recording.wav')):
+            recording = os.path.join(dir_path, 'recording.wav')
+        if not test and os.path.isfile(os.path.join(dir_path, 'test.wav')):
+            test = os.path.join(dir_path, 'test.wav')
+        if not responses and os.path.isfile(os.path.join(dir_path, 'responses.wav')):
+            responses = os.path.join(dir_path, 'responses.wav')
+        if not headphones and os.path.isfile(os.path.join(dir_path, 'headphones.wav')):
+            headphones = os.path.join(dir_path, 'headphones.wav')
+
     # Parameter checks
     if preprocess or postprocess:
         if not speakers:
             raise TypeError('Parameter "speakers" is required for pre-processing.')
     if preprocess:
         if not (recording or measure):
-            raise TypeError('Parameter "recording" is required for pre-processing when not measuring.')
+            raise TypeError('Recording file is is required for pre-processing when not measuring.')
         if not test:
-            raise TypeError('Parameter "test" is required for pre-processing.')
+            raise TypeError('Test signal file required for pre-processing.')
         if not silence_length:
             raise TypeError('Parameter "silence_length" is required for pre-processing.')
     if deconvolve:
-        if not recording:
-            raise TypeError('Parameter "recording" is required for deconvolution.')
-        if not test:
-            raise TypeError('Parameter "test" is required for deconvolution.')
+        if not (recording or preprocess):
+            raise TypeError('Recording file is required for deconvolution when not pre-processing.')
+        if not (test or preprocess):
+            raise TypeError('Test signal file is required for deconvolution when not pre-processing.')
     if postprocess:
         if not (responses or deconvolve):
-            raise TypeError('Parameter "responses" is required for post-processing when not doing deconvolution.')
+            raise TypeError('Responses file is required for post-processing when not doing deconvolution.')
     if equalize:
         if not headphones:
-            raise TypeError('Parameter "headphones" is required for equalization.')
+            raise TypeError('Headphones recording file is required for equalization.')
 
     # Read files
     if preprocess and recording is not None:
@@ -292,9 +305,9 @@ def main(measure=False,
     if postprocess and responses is not None:
         responses = AudioSegment.from_wav(responses)
 
-    if not os.path.isdir('out'):
+    if not os.path.isdir(out_dir):
         # Output directory does not exist, create it
-        os.makedirs('out', exist_ok=True)
+        os.makedirs(out_dir, exist_ok=True)
 
     # Logarithmic sine sweep measurement
     if measure:  # TODO
@@ -335,10 +348,10 @@ def main(measure=False,
         # plt.show()
 
         # Write multi-channel WAV file with sine sweeps
-        preprocessed.export('out/preprocessed.wav', format='wav')
+        preprocessed.export(os.path.join(out_dir, 'preprocessed.wav'), format='wav')
         # Write multi-channel WAV file with test track duplicated. Useful for Voxengo deconvolver.
         test_duplicated = [test for _ in range(preprocessed.channels)]
-        AudioSegment.from_mono_audiosegments(*test_duplicated).export('out/tests.wav', format='wav')
+        AudioSegment.from_mono_audiosegments(*test_duplicated).export(os.path.join(out_dir, 'tests.wav'), format='wav')
 
     # Deconvolution
     if deconvolve:  # TODO
@@ -378,7 +391,7 @@ def main(measure=False,
                 responses.append(lines)
         responses = AudioSegment.from_mono_audiosegments(*responses)
 
-        responses.export('out/responses.wav', format='wav')
+        responses.export(os.path.join(out_dir, 'responses.wav'), format='wav')
 
     # Post-processing for setting channel delays, channel order and cropping out the impulse response tails
     if postprocess:
@@ -415,13 +428,13 @@ def main(measure=False,
 
         # Write standard channel order HRIR
         standard = AudioSegment.from_mono_audiosegments(*padded)
-        standard.export('out/hrir.wav', format='wav')
+        standard.export(os.path.join(out_dir, 'hrir.wav'), format='wav')
 
         # Write HeSuVi channel order HRIR
         hesuvi_order = ['FL-left', 'FL-right', 'SL-left', 'SL-right', 'BL-left', 'BL-right', 'FC-left', 'FR-right',
                         'FR-left', 'SR-right', 'SR-left', 'BR-right', 'BR-left', 'FC-right']
         hesuvi = AudioSegment.from_mono_audiosegments(*[padded[IR_ORDER.index(ch)] for ch in hesuvi_order])
-        hesuvi.export('out/hesuvi.wav', format='wav')
+        hesuvi.export(os.path.join(out_dir, 'hesuvi.wav'), format='wav')
 
     if equalize:
         # Read WAV file
@@ -431,10 +444,9 @@ def main(measure=False,
             f, m = fft(ch.get_array_of_samples(), headphones.frame_rate)
             lines = ['frequency,raw']
             for j in range(len(f)):
-                if f[j] == 0.0:
-                    continue
-                lines.append('{f:.2f},{m:.2f}'.format(f=f[j], m=m[j]))
-            with open('out/headphones-{}.csv'.format('left' if i == 0 else 'right'), 'w') as file:
+                if f[j] > 0.0:
+                    lines.append('{f:.2f},{m:.2f}'.format(f=f[j], m=m[j]))
+            with open(os.path.join(out_dir, 'headphones-{}.csv'.format('left' if i == 0 else 'right')), 'w') as file:
                 file.write('\n'.join(lines))
 
 
@@ -450,6 +462,7 @@ def create_cli():
                             help='Post-process impulse responses to match channel delays and crop tails?')
     arg_parser.add_argument('--equalize', action='store_true',
                             help='Produce CSV file for AutoEQ from headphones sine sweep recordgin?')
+    arg_parser.add_argument('--dir_path', type=str, help='Path to directory for recordings and outputs.')
     arg_parser.add_argument('--recording', type=str, help='File path to sine sweep recording.')
     arg_parser.add_argument('--responses', type=str, help='File path to impulse responses.')
     arg_parser.add_argument('--test', type=str, help='File path to sine sweep test signal.')
@@ -464,7 +477,8 @@ def create_cli():
                             help='File path to headphones sine sweep recording. Stereo WAV file is expected.')
     # TODO: filtfilt
     args = vars(arg_parser.parse_args())
-    args['speakers'] = args['speakers'].upper().split(',')
+    if 'speakers' in args and args['speakers'] is not None:
+        args['speakers'] = args['speakers'].upper().split(',')
     return args
 
 
