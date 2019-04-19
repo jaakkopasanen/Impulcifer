@@ -371,7 +371,7 @@ def main(measure=False,
 
         responses = []
         for lines in preprocessed.split_to_mono():
-            if lines.rms > 2:
+            if lines.rms > 100:
                 # Do deconvolution
 
                 h = deconv(
@@ -404,9 +404,13 @@ def main(measure=False,
         i = 0
         responses = responses.split_to_mono()
         while i < len(responses):
+            # if CHANNELS[i // 2] not in speakers:
+            #     print('Skipping response {i} for {ir_name}'.format(i=i, ir_name=IR_ORDER[i]))
+            #     i += 1
+            #     continue
             left = responses[i]
             right = responses[i+1]
-            if left.rms > 2 and right.rms > 2:
+            if left.rms > 100 and right.rms > 100:
                 # Crop tails
                 left = crop_ir_tail(left)
                 right = crop_ir_tail(right)
@@ -470,7 +474,7 @@ def create_cli():
                             help='Order of speakers in the recording as a comma separated list of speaker channel '
                                  'names. Supported names are "FL" (front left), "FR" (front right), '
                                  '"FC" (front center), "BL" (back left), "BR" (back right), '
-                                 '"SL" (side left), "SR" (side right)."')
+                                 '"SL" (side left), "SR" (side right)". For example: "FL,FR".')
     arg_parser.add_argument('--silence_length', type=float,
                             help='Length of silence in the beginning, end and between recordings.')
     arg_parser.add_argument('--headphones', type=str,
