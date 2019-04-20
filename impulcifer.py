@@ -3,10 +3,13 @@
 import os
 import numpy as np
 import matplotlib.pyplot as plt
-from pydub import AudioSegment, effects
+from pydub import AudioSegment
 import argparse
-from scipy import signal, linalg
-from scipy.io import wavfile
+from scipy import signal
+from scipy.fftpack import fft
+from scipy.signal import fftconvolve, kaiser
+import pyfftw
+from time import time
 
 # https://en.wikipedia.org/wiki/Surround_sound
 SPEAKER_NAMES = ['FL', 'FR', 'FC', 'BL', 'BR', 'SL', 'SR']
@@ -131,6 +134,13 @@ def split_recording(recording, test_signal, speakers, fs, silence_length):
     return tracks
 
 
+def normalize(x, target_db=-0.1):
+    arg_max = np.unravel_index(np.argmax(x), x.shape)  # 2D argmax index
+    x = x / np.abs(x[arg_max])  # Normalize by largest abs value
+    x = x * 10**(target_db / 20)  # Scale down by -0.1 dB
+    return x
+
+
 def tail_index(impulse_response, fs):
     """Finds index in an impulse response after which there is nothing but noise left
 
@@ -142,8 +152,7 @@ def tail_index(impulse_response, fs):
         Tail index
     """
     # Normalize
-    #impulse_response /= np.max(impulse_response)
-    normalized = impulse_response / np.max(impulse_response)
+    normalized = normalize(impulse_response, target_db=-0.1)
 
     # Sliding window RMS
     window_size_ms = 1
@@ -153,28 +162,34 @@ def tail_index(impulse_response, fs):
     n = len(normalized) // window_size
     windows = np.vstack(np.split(normalized[:n*window_size], n))
     rms = np.sqrt(np.mean(np.square(windows), axis=1))
+    rms = normalize(rms, target_db=0.0)
+
+    # Smoothen data
+    for _ in range(2):
+        rms = signal.savgol_filter(rms, 251, 1)
 
     # Peak
     peak_index = np.argmax(rms)
 
-    # Detect noise floor
-    # 10 dB above RMS at the end (last 10 windows) or -60 dB, whichever is greater
-    noise_floor = np.max(rms[-50 // window_size_ms:])
+    for i in range(peak_index+1, len(rms)):
+        if rms[i] > rms[i-1]:
+            break
+    noise_floor = rms[i]
+    noise_floor *= 2  # +6dB headroom
+    tail_ind = np.argmax(rms < noise_floor)
+    tail_ms = tail_ind * window_size_ms
 
-    # First index after peak where RMS is below noise floor
-    # argmax will stop at the first True value of a boolean array
-    rms_tail_ind = np.argmax((rms < noise_floor)[peak_index:])
-    rms_tail_ind += peak_index
-    tail_ms = rms_tail_ind * window_size_ms
-    tail_ind = int(np.round(tail_ms * fs / 1000))
+    plt.plot(window_size_ms * np.arange(n), 20*np.log10(rms))
+    plt.plot([0, window_size_ms * len(rms)], [20*np.log10(noise_floor)]*2, color='red')
+    plt.plot([tail_ms]*2, [0, -120], color='red')
+    plt.ylim([-120, 0])
+    plt.xlim([-100, n * window_size_ms])
+    plt.xlabel('Time (ms)')
+    plt.grid(True, which='major')
+    plt.show()
 
-    # plt.plot(window_size_ms * np.arange(n), 20*np.log10(rms))
-    # plt.plot([0, window_size_ms * len(rms)], [20*np.log10(noise_floor)]*2, color='red')
-    # plt.plot([tail_ms]*2, [0, -120], color='red')
-    # plt.ylim([-120, 0])
-    # plt.xlim([0, n * window_size_ms])
-    # plt.xlabel('Time (ms)')
-    # plt.show()
+    # Tail index in impulse response, rms has larger window size
+    tail_ind *= window_size
 
     return tail_ind
 
@@ -247,13 +262,14 @@ def zero_pad(data, max_samples):
     return zero_padded
 
 
-def deconv(recording, test_signal, method='inverse_filter'):
+def deconv(recording, test_signal, method='inverse_filter', fs=None):
     """Calculates deconvolution in frequency or time domain.
 
     Args:
         recording: Recording as numpy array
         test_signal: Test signal as numpy array
         method: "inverse_filter" or "fft"
+        fs: Sampling rate, required when method is "inverse_filter"
 
     Returns:
         Impulse response
@@ -265,8 +281,41 @@ def deconv(recording, test_signal, method='inverse_filter'):
         H = Y / X
         h = np.fft.ifft(H)
         h = np.real(h)
+
     elif method == 'inverse_filter':
-        raise NotImplementedError('Inverse filter deconvolution has not been implemented yet.')
+        if fs is None:
+            raise TypeError('Sampling rate is required for inverse filter deconvolution.')
+        t = time()
+        test_signal = np.squeeze(test_signal)
+        # TODO: Use ImpulseResponseEstimator to avoid building inverse filter for every track
+
+        # FIXME: low and high should be given as parameters, it's not possible to infer them from test signal
+        low = 20
+        high = 20000
+        w1 = low / fs * 2*np.pi  # Sweep start frequency in radians relative to sampling frequency
+        w2 = high / fs * 2*np.pi  # Sweep end frequency in radians relative to sampling frequency
+
+        # This is what the value of K will be at the end (in dB):
+        k_end = 10 ** ((-6 * np.log2(w2 / w1)) / 20)
+        # dB to rational number.
+        k = np.log(k_end) / len(test_signal)
+
+        # Making inverse of test signal so that convolution will just calculate a dot product
+        # Weighting it with exponent to achieve 6 dB per octave amplitude decrease.
+        c = np.array(list(map(lambda t: np.exp(float(t) * k), range(len(test_signal)))))
+        inv_filter = np.flip(test_signal) * c
+
+        # Now we have to normalize energy of result of dot product.
+        # This is "naive" method but it just works.
+        frp = pyfftw.empty_aligned(len(test_signal)*2-1, dtype='complex128')
+        frp[:] = fftconvolve(inv_filter, test_signal)
+        frp = pyfftw.interfaces.scipy_fftpack.fft(frp)
+        inv_filter /= np.abs(frp[round(frp.shape[0] / 4)])
+
+        # Deconvolution between recording and inverse filter
+        h = fftconvolve(recording, inv_filter, mode='full')
+        h = np.concatenate([h, [0.0]])
+        h = h[len(test_signal):len(test_signal) * 2 + 1]
     else:
         raise ValueError('"{}" is not one of the supported "domain" parameter values "time" or "frequency".')
     return h
@@ -375,7 +424,7 @@ def main(measure=False,
     recording = reorder_tracks(recording, speakers)
 
     # Normalize to -0.1 dB
-    #preprocessed = preprocessed.normalize()
+    recording = normalize(recording, target_db=-0.1)
 
     # Write multi-channel WAV file with sine sweeps for debugging
     write_wav(os.path.join(out_dir, 'preprocessed.wav'), fs, recording)
@@ -385,14 +434,16 @@ def main(measure=False,
 
     # Estimate impulse responses by deconvolution
     impulse_responses = []
+    t = time()
     for i in range(recording.shape[0]):
         track = recording[i, :]
-        if np.nonzero(track) != len(track):
+        if len(np.nonzero(track)[0]) > 0:
             # Run deconvolution
             impulse_response = deconv(
                 track,
                 test_signal,
-                method='fft'
+                method='inverse_filter',
+                fs=fs
             )
 
             # Add to responses
