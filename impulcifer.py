@@ -6,19 +6,23 @@ import matplotlib.pyplot as plt
 from pydub import AudioSegment, effects
 import argparse
 from scipy import signal, linalg
+from scipy.io import wavfile
 
 # https://en.wikipedia.org/wiki/Surround_sound
-CHANNELS = ['FL', 'FR', 'FC', 'BL', 'BR', 'SL', 'SR']
+SPEAKER_NAMES = ['FL', 'FR', 'FC', 'BL', 'BR', 'SL', 'SR']
 
 # Each channel, left and right
 IR_ORDER = []
-for _ch in CHANNELS:
+for _ch in SPEAKER_NAMES:
     IR_ORDER.append(_ch+'-left')
     IR_ORDER.append(_ch+'-right')
 
-# See README for details how these were obtained
-# Two samples (@48kHz) added to beginning
-DELAYS = {
+# Time delays between speaker to primary ear vs speaker to middle of head in milliseconds
+# Speaker configuration is perfect circle around listening position
+# Distance from side left speaker (SL) to left ear is smaller than distance from front left (FL) to left ear
+# Two samples (@48kHz) added to each for head room
+# These are used for synchronizing impulse responses
+SPEAKER_DELAYS = {
     'FL': 0.1487,
     'FR': 0.1487,
     'FC': 0.2557,
@@ -29,7 +33,7 @@ DELAYS = {
 }
 
 
-def fft(x, fs):
+def magnitude_response(x, fs):
     nfft = len(x)
     df = fs / nfft
     f = np.arange(0, fs - df, df)
@@ -53,7 +57,7 @@ def to_float(x):
     x = x.astype('float64')
     if dtype == 'int32':
         x /= 2.0 ** 31
-    if dtype == 'int16':
+    elif dtype == 'int16':
         x /= 2.0 ** 15
     elif dtype == 'uint8':
         x /= 2.0 ** 8
@@ -71,7 +75,7 @@ def plot_sweep(x, fs, name=None):
         plt.legend([name])
 
 
-def split_recording(recording, test_signal, speakers, silence_length=2.0):
+def split_recording(recording, test_signal, speakers, fs, silence_length):
     """Splits sine sweep recording into individual speaker-ear pairs
 
     Recording looks something like this (stereo only in this example):
@@ -92,70 +96,90 @@ def split_recording(recording, test_signal, speakers, silence_length=2.0):
         recording: AudioSegment for the sine sweep recording
         test_signal: AudioSegment for the test signal
         speakers: Speaker order as a list of strings
+        fs: Sampling rate
         silence_length: Length of silence in the beginning, end and between test signals in seconds
 
     Returns:
 
     """
+    if silence_length * fs != int(silence_length * fs):
+        raise ValueError('Silence length must produce full samples with given sampling rate.')
+    silence_length = int(silence_length * fs)
+
     # Number of speakers in each track
-    n_columns = round(len(speakers) / (recording.channels // 2))
+    n_columns = round(len(speakers) / (recording.shape[0] // 2))
+
+    # Crop out initial silence
+    recording = recording[:, silence_length:]
 
     # Split sections in time to columns
     columns = []
-    ms = silence_length*1000 + len(test_signal)
-    remainder = recording[silence_length*1000:]
-    for _ in range(n_columns):
-        columns.append(remainder[:ms].split_to_mono())  # Add list of mono channel AudioSegments
-        remainder = remainder[ms:]  # Cut to the beginning of next signal
+    column_size = silence_length + test_signal.shape[1]
+    for i in range(n_columns):
+        columns.append(recording[:, i*column_size:(i+1)*column_size])
 
     # Split each track by columns
     tracks = []
     i = 0
-    while i < recording.channels:
+    while i < recording.shape[0]:
         for column in columns:
-            tracks.append(column[i])  # Left ear of current speaker
-            tracks.append(column[i+1])  # Right ear of current speaker
+            tracks.append(column[i, :])  # Left ear of current speaker
+            tracks.append(column[i+1, :])  # Right ear of current speaker
         i += 2
+    tracks = np.vstack(tracks)
 
-    return AudioSegment.from_mono_audiosegments(*tracks)
+    return tracks
 
 
-def crop_ir_tail(response):
-    """Crops out silent tail of an impulse response.
+def tail_index(impulse_response, fs):
+    """Finds index in an impulse response after which there is nothing but noise left
 
     Args:
-        response: AudioSegment for the impulse response
+        impulse_response: Impulse response data as numpy array
+        fs: Sampling rate
 
     Returns:
-        Cropped AudioSegment
+        Tail index
     """
-    # Find highest peak
-    data = np.array(response.get_array_of_samples())
+    # Normalize
+    #impulse_response /= np.max(impulse_response)
+    normalized = impulse_response / np.max(impulse_response)
 
     # Sliding window RMS
-    rms = []
-    n = response.frame_rate // 1000  # Window size
-    for j in range(1, len(response)):
-        window = data[(j - 1) * n:j * n]  # Select window
-        window = to_float(window)  # Normalize between -1..1
-        rms.append(np.sqrt(np.mean(np.square(window))))  # RMS
+    window_size_ms = 1
+    window_size = fs // 1000 * window_size_ms
+
+    # RMS windows
+    n = len(normalized) // window_size
+    windows = np.vstack(np.split(normalized[:n*window_size], n))
+    rms = np.sqrt(np.mean(np.square(windows), axis=1))
+
+    # Peak
+    peak_index = np.argmax(rms)
 
     # Detect noise floor
     # 10 dB above RMS at the end (last 10 windows) or -60 dB, whichever is greater
-    noise_floor = np.max([np.mean(rms[-10:-1]) * 10, 10.0 ** (-60.0 / 10.0)])
+    noise_floor = np.max(rms[-50 // window_size_ms:])
 
-    # Remove tail below noise floor
-    end = -1
-    for j in range(len(rms) - 1, 1, -1):
-        if rms[j] > noise_floor:
-            break
-        end = j
+    # First index after peak where RMS is below noise floor
+    # argmax will stop at the first True value of a boolean array
+    rms_tail_ind = np.argmax((rms < noise_floor)[peak_index:])
+    rms_tail_ind += peak_index
+    tail_ms = rms_tail_ind * window_size_ms
+    tail_ind = int(np.round(tail_ms * fs / 1000))
 
-    # Return cropped. Delay before peak and to "silence"
-    return response[:end]
+    # plt.plot(window_size_ms * np.arange(n), 20*np.log10(rms))
+    # plt.plot([0, window_size_ms * len(rms)], [20*np.log10(noise_floor)]*2, color='red')
+    # plt.plot([tail_ms]*2, [0, -120], color='red')
+    # plt.ylim([-120, 0])
+    # plt.xlim([0, n * window_size_ms])
+    # plt.xlabel('Time (ms)')
+    # plt.show()
+
+    return tail_ind
 
 
-def crop_ir_head(left, right, speaker):
+def crop_ir_head(left, right, speaker, fs):
     """Crops out silent head of left and right ear impulse responses and sets delay to correct value according to
     speaker channel
 
@@ -163,147 +187,178 @@ def crop_ir_head(left, right, speaker):
         left: AudioSegment for left ear impulse response
         right: AudioSegment for right ear impulse response
         speaker: Speaker channel name
+        fs: Sampling rate
 
     Returns:
         Cropped left and right AudioSegments as a tuple (left, right)
     """
     # Peaks
-    peak_left, _ = signal.find_peaks(to_float(np.array(left.normalize().get_array_of_samples())), height=0.1)
-    peak_left = peak_left[0] / left.frame_rate * 1000
-    peak_right, _ = signal.find_peaks(to_float(np.array(right.normalize().get_array_of_samples())), height=0.1)
-    peak_right = peak_right[0] / right.frame_rate * 1000
-    # Inter aural time difference
+    peak_left, _ = signal.find_peaks(left / np.max(left), height=0.1)
+    peak_left = peak_left[0]
+    peak_right, _ = signal.find_peaks(right / np.max(right), height=0.1)
+    peak_right = peak_right[0]
+    # Inter aural time difference (in samples)
     itd = np.abs(peak_left - peak_right)
 
     # Speaker channel delay
-    delay = DELAYS[speaker]
+    delay = int(np.round(SPEAKER_DELAYS[speaker] / 1000 * fs))  # Channel delay in samples
     if peak_left < peak_right:
-        # Left side speaker
+        # Delay to left ear is smaller, this is must left side speaker
         if speaker[1] == 'R':
-            raise ValueError(speaker, 'impulse response has lower delay to left ear than to right.')
+            # Speaker name indicates this is right side speaker, there is something wrong with the measurement
+            raise ValueError(speaker + ' impulse response has lower delay to left ear than to right.')
+        # Crop out silence from the beginning, only required channel delay remains
+        # Secondary ear has additional delay for inter aural time difference
         left = left[peak_left-delay:]
         right = right[peak_right-(delay+itd):]
     else:
-        # Right side speaker
+        # Delay to right ear is smaller, this is must right side speaker
         if speaker[1] == 'L':
-            raise ValueError(speaker, 'impulse response has lower delay to right ear than to left.')
+            # Speaker name indicates this is left side speaker, there si something wrong with the measurement
+            raise ValueError(speaker + ' impulse response has lower delay to right ear than to left.')
+        # Crop out silence from the beginning, only required channel delay remains
+        # Secondary ear has additional delay for inter aural time difference
         left = left[peak_left-(delay+itd):]
         right = right[peak_right-delay:]
 
     # Make sure impulse response starts from silence
-    left = left.fade_in(2/left.frame_rate/1000)
-    right = right.fade_in(2/right.frame_rate/1000)
-
-    # Crop to integer number of samples
-    left = left[:(int(len(left) / 1000 * left.frame_rate) - 1) / left.frame_rate * 1000]
-    right = right[:(int(len(right) / 1000 * right.frame_rate) - 1) / right.frame_rate * 1000]
+    # TODO: check if this is necessary
+    left[0] *= 0.0
+    left[1] *= 0.5
+    right[0] *= 0.0
+    right[1] *= 0.5
 
     return left, right
 
 
-def zero_pad(seg, max_samples, fs):
-    seg_samples = np.array(seg.get_array_of_samples())
-    silence_length = max_samples - len(seg_samples)
-    silence = np.zeros(silence_length, dtype=seg_samples.dtype)
-    zero_padded = np.concatenate([seg_samples, silence])
-    return AudioSegment(
-        zero_padded.tobytes(),
-        sample_width=seg.sample_width,
-        frame_rate=fs,
-        channels=1
-    )
+def zero_pad(data, max_samples):
+    """Zero pads data to a give length
+
+    Args:
+        data: Audio data as numpy array
+        max_samples: Target number of samples
+
+    Returns:
+
+    """
+    padding_length = max_samples - data.shape[1]
+    silence = np.zeros((data.shape[0], padding_length), dtype=data.dtype)
+    zero_padded = np.concatenate([data, silence], axis=1)
+    return zero_padded
 
 
-def deconv(y, x, domain='time'):
+def deconv(recording, test_signal, method='inverse_filter'):
     """Calculates deconvolution in frequency or time domain.
 
     Args:
-        y: Recording as numpy array
-        x: Test signal as numpy array
-        domain: "time" or "frequency"
+        recording: Recording as numpy array
+        test_signal: Test signal as numpy array
+        method: "inverse_filter" or "fft"
 
     Returns:
         Impulse response
     """
-    if domain == 'frequency':
+    if method == 'fft':
         # Division in frequency domain is deconvolution in time domain
-        X = np.fft.fft(x)
-        Y = np.fft.fft(y)
+        X = np.fft.fft(test_signal)
+        Y = np.fft.fft(recording)
         H = Y / X
         h = np.fft.ifft(H)
         h = np.real(h)
-    elif domain == 'time':
-        # Toepliz convolution: https://en.wikipedia.org/wiki/Toeplitz_matrix
-        # Create zero padded matrix where each column is shifted one step down
-        X = linalg.toeplitz(x, np.concatenate((x[0:1], np.zeros(len(x) - 1))))
-        h = np.matmul(np.matmul(np.linalg.inv(np.matmul(np.transpose(X), X)), np.transpose(X)), y)
-        # h = linalg.solve_toeplitz(
-        #     (x, np.concatenate((x[0:1], np.zeros(len(x) - 1)))),
-        #     y
-        # )
+    elif method == 'inverse_filter':
+        raise NotImplementedError('Inverse filter deconvolution has not been implemented yet.')
     else:
         raise ValueError('"{}" is not one of the supported "domain" parameter values "time" or "frequency".')
     return h
 
 
+def read_wav(file_path):
+    """Reads WAV file
+
+    Args:
+        file_path: Path to WAV file as string
+
+    Returns:
+        - sampling frequency as integer
+        - wav data as numpy array with one row per track, samples in range -1..1
+    """
+    # Using AudioSegment because SciPy can't read 24-bit WAVs
+    seg = AudioSegment.from_wav(file_path)
+    data = []
+    for track in seg.split_to_mono():
+        # Read samples of each track separately
+        data.append(track.get_array_of_samples())
+    # Create numpy array where tracks are on rows and samples have been scaled in range -1..1
+    data = to_float(np.vstack(data))
+    return seg.frame_rate, data
+
+
+def write_wav(file_path, fs, data):
+    """Writes WAV file."""
+    tracks = []
+    for i in range(data.shape[0]):
+        tracks.append(AudioSegment(
+            np.multiply(data[i, :], 2 ** 31).astype('int32').tobytes(),
+            frame_rate=fs,
+            sample_width=4,
+            channels=1
+        ))
+    seg = AudioSegment.from_mono_audiosegments(*tracks)
+    seg.export(file_path, format='wav')
+
+
+def reorder_tracks(tracks, speakers):
+    """Reorders tracks to match standard track order
+
+    Will add silent tracks if the given tracks do not contain all seven speakers
+
+    Args:
+        tracks: Sample data for tracks as Numpy array, tracks on rows
+        speakers: List of speaker names eg. ["FL", "FR"]
+
+    Returns:
+        Reordered tracks
+    """
+    track_names = []
+    for speaker in speakers:
+        track_names.append(speaker + '-left')
+        track_names.append(speaker + '-right')
+
+    reordered = []
+    for ch in IR_ORDER:
+        if ch not in track_names:
+            reordered.append(np.zeros(tracks.shape[1]))
+        else:
+            reordered.append(tracks[track_names.index(ch)])
+    reordered = np.vstack(reordered)
+    return reordered
+
+
 def main(measure=False,
-         preprocess=False,
-         deconvolve=False,
-         postprocess=False,
          equalize=False,
          dir_path=None,
          recording=None,
-         test=None,
-         responses=None,
+         headphones=None,
+         test_signal=None,
          speakers=None,
-         silence_length=None,
-         headphones=None):
+         silence_length=None):
     """"""
-    if measure:
-        raise NotImplementedError('Measurement is not yet implemented.')
-
     out_dir = 'out'
     if dir_path and os.path.isdir(dir_path):
         out_dir = dir_path
         if not recording and os.path.isfile(os.path.join(dir_path, 'recording.wav')):
             recording = os.path.join(dir_path, 'recording.wav')
-        if not test and os.path.isfile(os.path.join(dir_path, 'test.wav')):
-            test = os.path.join(dir_path, 'test.wav')
-        if not responses and os.path.isfile(os.path.join(dir_path, 'responses.wav')):
-            responses = os.path.join(dir_path, 'responses.wav')
+        if not test_signal and os.path.isfile(os.path.join(dir_path, 'test.wav')):
+            test_signal = os.path.join(dir_path, 'test.wav')
         if not headphones and os.path.isfile(os.path.join(dir_path, 'headphones.wav')):
             headphones = os.path.join(dir_path, 'headphones.wav')
 
-    # Parameter checks
-    if preprocess or postprocess:
-        if not speakers:
-            raise TypeError('Parameter "speakers" is required for pre-processing.')
-    if preprocess:
-        if not (recording or measure):
-            raise TypeError('Recording file is is required for pre-processing when not measuring.')
-        if not test:
-            raise TypeError('Test signal file required for pre-processing.')
-        if not silence_length:
-            raise TypeError('Parameter "silence_length" is required for pre-processing.')
-    if deconvolve:
-        if not (recording or preprocess):
-            raise TypeError('Recording file is required for deconvolution when not pre-processing.')
-        if not (test or preprocess):
-            raise TypeError('Test signal file is required for deconvolution when not pre-processing.')
-    if postprocess:
-        if not (responses or deconvolve):
-            raise TypeError('Responses file is required for post-processing when not doing deconvolution.')
-    if equalize:
-        if not headphones:
-            raise TypeError('Headphones recording file is required for equalization.')
-
     # Read files
-    if preprocess and recording is not None:
-        recording = AudioSegment.from_wav(recording)
-    if (preprocess or deconvolve) and test is not None:
-        test = AudioSegment.from_wav(test)
-    if postprocess and responses is not None:
-        responses = AudioSegment.from_wav(responses)
+    fs_rec, recording = read_wav(recording)
+    fs_ts, test_signal = read_wav(test_signal)
+    if fs_rec != fs_ts:
+        raise ValueError('Sampling rates of recording and test signal do not match.')
+    fs = fs_rec
 
     if not os.path.isdir(out_dir):
         # Output directory does not exist, create it
@@ -313,163 +368,107 @@ def main(measure=False,
     if measure:  # TODO
         raise NotImplementedError('Measurement is not yet implemented.')
 
-    # Pre-processing
-    if preprocess:
-        # Split recording WAV file into individual mono tracks
-        sweeps = split_recording(recording, test, speakers=speakers, silence_length=silence_length)
+    # Split recording WAV file into individual mono tracks
+    recording = split_recording(recording, test_signal, speakers, fs, silence_length)
 
-        # Reorder tracks
-        sweeps = sweeps.split_to_mono()
-        sweep_order = []
-        for speaker in speakers:
-            sweep_order.append(speaker + '-left')
-            sweep_order.append(speaker + '-right')
-        reordered = []
-        for ch in IR_ORDER:
-            if ch not in sweep_order:
-                reordered.append(AudioSegment.silent(len(sweeps[0]), sweeps[0].frame_rate))
-            else:
-                reordered.append(sweeps[sweep_order.index(ch)])
-        preprocessed = AudioSegment.from_mono_audiosegments(*reordered)
+    # Reorder tracks to match standard
+    recording = reorder_tracks(recording, speakers)
 
-        # Normalize to -0.1 dB
-        preprocessed = preprocessed.normalize()
+    # Normalize to -0.1 dB
+    #preprocessed = preprocessed.normalize()
 
-        # # Plot waveforms for inspection
-        # data = np.vstack([tr.get_array_of_samples() for tr in sweeps.split_to_mono()])
-        # for j in range(data.shape[0]):
-        #     plt.subplot(data.shape[0], 1, j + 1)
-        #     plot_sweep(
-        #         normalize(data[j, :]),
-        #         recording.frame_rate,
-        #         name=IR_ORDER[j]
-        #     )
-        # plt.xlabel('Time (s)')
-        # plt.show()
+    # Write multi-channel WAV file with sine sweeps for debugging
+    write_wav(os.path.join(out_dir, 'preprocessed.wav'), fs, recording)
 
-        # Write multi-channel WAV file with sine sweeps
-        preprocessed.export(os.path.join(out_dir, 'preprocessed.wav'), format='wav')
-        # Write multi-channel WAV file with test track duplicated. Useful for Voxengo deconvolver.
-        test_duplicated = [test for _ in range(preprocessed.channels)]
-        AudioSegment.from_mono_audiosegments(*test_duplicated).export(os.path.join(out_dir, 'tests.wav'), format='wav')
+    # Pad test signal to pre-processed recording length with zeros
+    test_signal = zero_pad(test_signal, recording.shape[1])
 
-    # Deconvolution
-    if deconvolve:  # TODO
-        # Make sure sampling rates match
-        if preprocessed.frame_rate != test.frame_rate:
-            raise ValueError('Sampling frequencies of test tone and recording must match!')
+    # Estimate impulse responses by deconvolution
+    impulse_responses = []
+    for i in range(recording.shape[0]):
+        track = recording[i, :]
+        if np.nonzero(track) != len(track):
+            # Run deconvolution
+            impulse_response = deconv(
+                track,
+                test_signal,
+                method='fft'
+            )
 
-        # Pad test signal to pre-processed recording length with zeros
-        test_padded = zero_pad(
-            test,
-            len(preprocessed.split_to_mono()[0].get_array_of_samples()),
-            preprocessed.frame_rate
-        )
+            # Add to responses
+            impulse_responses.append(impulse_response)
+        else:
+            # Silent track
+            impulse_responses.append(np.zeros(recording.shape[1]))
+    impulse_responses = np.vstack(impulse_responses)
 
-        # Fourier transform of test signal
-        x = np.array(test_padded.get_array_of_samples(), dtype='float32')
+    # Save impulse responses to file for debugging
+    write_wav(os.path.join(out_dir, 'responses.wav'), fs, impulse_responses)
 
-        responses = []
-        for lines in preprocessed.split_to_mono():
-            if lines.rms > 100:
-                # Do deconvolution
+    # Crop heads
+    cropped = []
+    i = 0
+    while i < impulse_responses.shape[0]:
+        # Speaker tracks are paired so that first is left ear mic and second is right ear mic
+        left = impulse_responses[i]
+        right = impulse_responses[i + 1]
+        speaker = SPEAKER_NAMES[i // 2]
+        if len(np.nonzero(left)[0]) > 0 and len(np.nonzero(right)[0]) > 0:
+            # Crop head
+            left, right = crop_ir_head(left, right, speaker, fs)
+            cropped.append(left)
+            cropped.append(right)
+        elif len(np.nonzero(left)[0]) == 0 and len(np.nonzero(right)[0]) == 0:
+            # Silent tracks
+            cropped.append(left)
+            cropped.append(right)
+        else:
+            raise ValueError('Left and right ear recording pair must be non-zero for both or neither.')
+        i += 2
 
-                h = deconv(
-                    np.array(lines.get_array_of_samples(), dtype='float32'),
-                    x,
-                    domain='frequency'
-                )
+    # Crop tails together
+    # Find indices after which there is only noise in each track
+    tail_indices = []
+    for track in cropped:
+        if len(np.nonzero(track)[0]) > 0:
+            tail_indices.append(tail_index(track, fs))
+    # Crop all tracks by last tail index
+    tail_ind = max(tail_indices)
+    for i in range(len(cropped)):
+        cropped[i] = cropped[i][:tail_ind]
+    impulse_responses = np.vstack(cropped)
 
-                # Add to responses
-                responses.append(AudioSegment(
-                    np.multiply(h, 2**31).astype('int32').tobytes(),
-                    frame_rate=preprocessed.frame_rate,
-                    sample_width=4,
-                    channels=1
-                ))
-            else:
-                responses.append(lines)
-        responses = AudioSegment.from_mono_audiosegments(*responses)
+    # Write standard channel order HRIR
+    write_wav(os.path.join(out_dir, 'hrir.wav'), fs, impulse_responses)
 
-        responses.export(os.path.join(out_dir, 'responses.wav'), format='wav')
-
-    # Post-processing for setting channel delays, channel order and cropping out the impulse response tails
-    if postprocess:
-        # Read WAV file
-        if type(responses) == str:
-            responses = AudioSegment.from_wav(responses)
-        fs = responses.frame_rate
-        # Crop
-        cropped = []
-        i = 0
-        responses = responses.split_to_mono()
-        while i < len(responses):
-            # if CHANNELS[i // 2] not in speakers:
-            #     print('Skipping response {i} for {ir_name}'.format(i=i, ir_name=IR_ORDER[i]))
-            #     i += 1
-            #     continue
-            left = responses[i]
-            right = responses[i+1]
-            if left.rms > 100 and right.rms > 100:
-                # Crop tails
-                left = crop_ir_tail(left)
-                right = crop_ir_tail(right)
-                # Crop head
-                speaker = CHANNELS[i//2]
-                left, right = crop_ir_head(left, right, speaker)
-                cropped.append(left)
-                cropped.append(right)
-            else:
-                cropped.append(left[:1])  # For left
-                cropped.append(right[:1])  # For right
-            i += 2
-
-        # Zero pad to longest
-        max_samples = max([len(ir.get_array_of_samples()) for ir in cropped])
-        padded = []
-        for response in cropped:
-            padded.append(zero_pad(response, max_samples, fs))
-
-        # Write standard channel order HRIR
-        standard = AudioSegment.from_mono_audiosegments(*padded)
-        standard.export(os.path.join(out_dir, 'hrir.wav'), format='wav')
-
-        # Write HeSuVi channel order HRIR
-        hesuvi_order = ['FL-left', 'FL-right', 'SL-left', 'SL-right', 'BL-left', 'BL-right', 'FC-left', 'FR-right',
-                        'FR-left', 'SR-right', 'SR-left', 'BR-right', 'BR-left', 'FC-right']
-        hesuvi = AudioSegment.from_mono_audiosegments(*[padded[IR_ORDER.index(ch)] for ch in hesuvi_order])
-        hesuvi.export(os.path.join(out_dir, 'hesuvi.wav'), format='wav')
+    # Write HeSuVi channel order HRIR
+    hesuvi_order = ['FL-left', 'FL-right', 'SL-left', 'SL-right', 'BL-left', 'BL-right', 'FC-left', 'FR-right',
+                    'FR-left', 'SR-right', 'SR-left', 'BR-right', 'BR-left', 'FC-right']
+    indices = [IR_ORDER.index(ch) for ch in hesuvi_order]
+    write_wav(os.path.join(out_dir, 'hesuvi.wav'), fs, impulse_responses[indices, :])
 
     if equalize:
         # Read WAV file
         if type(headphones) == str:
             headphones = AudioSegment.from_wav(headphones)
         for i, ch in enumerate(headphones.split_to_mono()):
-            f, m = fft(ch.get_array_of_samples(), headphones.frame_rate)
-            lines = ['frequency,raw']
+            f, m = magnitude_response(ch.get_array_of_samples(), headphones.frame_rate)
+            track = ['frequency,raw']
             for j in range(len(f)):
                 if f[j] > 0.0:
-                    lines.append('{f:.2f},{m:.2f}'.format(f=f[j], m=m[j]))
+                    track.append('{f:.2f},{m:.2f}'.format(f=f[j], m=m[j]))
             with open(os.path.join(out_dir, 'headphones-{}.csv'.format('left' if i == 0 else 'right')), 'w') as file:
-                file.write('\n'.join(lines))
+                file.write('\n'.join(track))
 
 
 def create_cli():
     arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument('--measure', action='store_true',
                             help='Measure sine sweeps? Uses default audio output and input devices.')
-    arg_parser.add_argument('--preprocess', action='store_true',
-                            help='Pre-process recording to produce individual tracks for each speaker-ear pair? '
-                                 'If this is not given then recording file is assumed to be already preprocessed.')
-    arg_parser.add_argument('--deconvolve', action='store_true', help='Run deconvolution?')
-    arg_parser.add_argument('--postprocess', action='store_true',
-                            help='Post-process impulse responses to match channel delays and crop tails?')
     arg_parser.add_argument('--equalize', action='store_true',
                             help='Produce CSV file for AutoEQ from headphones sine sweep recordgin?')
     arg_parser.add_argument('--dir_path', type=str, help='Path to directory for recordings and outputs.')
-    arg_parser.add_argument('--recording', type=str, help='File path to sine sweep recording.')
-    arg_parser.add_argument('--responses', type=str, help='File path to impulse responses.')
-    arg_parser.add_argument('--test', type=str, help='File path to sine sweep test signal.')
+    arg_parser.add_argument('--test_signal', type=str, help='File path to sine sweep test signal.')
     arg_parser.add_argument('--speakers', type=str,
                             help='Order of speakers in the recording as a comma separated list of speaker channel '
                                  'names. Supported names are "FL" (front left), "FR" (front right), '

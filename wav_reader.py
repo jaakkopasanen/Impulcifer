@@ -5,7 +5,7 @@ from scipy.io import wavfile
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 
-from impulcifer import fft
+from impulcifer import magnitude_response
 
 
 def main():
@@ -38,8 +38,8 @@ def main():
     plt.ylabel('Amplitude')
 
     ax = plt.subplot(2, 2, (2, 4))
-    f, X_mag_l = fft(data[:, 0], Fs)
-    f, X_mag_r = fft(data[:, 1], Fs)
+    f, X_mag_l = magnitude_response(data[:, 0], Fs)
+    f, X_mag_r = magnitude_response(data[:, 1], Fs)
     X_mag_l = X_mag_l[f <= 20000]
     X_mag_r = X_mag_r[f <= 20000]
     f = f[f <= 20000]
