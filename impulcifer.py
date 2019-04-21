@@ -3,6 +3,8 @@
 import os
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.mlab as mlab
+from matplotlib import ticker
 from pydub import AudioSegment
 import argparse
 from scipy import signal
@@ -141,33 +143,46 @@ def normalize(x, target_db=-0.1):
     return x
 
 
-def tail_index(impulse_response, fs):
+def impulse_response_decay(impulse_response, fs, window_size_ms=1, show_plot=False, plot_file_path=None):
+    # Sliding window RMS
+    window_size = fs // 1000 * window_size_ms
+
+    # RMS windows
+    n = len(impulse_response) // window_size
+    windows = np.vstack(np.split(impulse_response[:n * window_size], n))
+    rms = np.sqrt(np.mean(np.square(windows), axis=1))
+
+    # Smoothen data
+    smoothed = 20*np.log10(rms)
+    for _ in range(200):
+        smoothed = signal.savgol_filter(smoothed, 11, 1)
+
+    if show_plot or plot_file_path:
+        fig, ax = plt.subplots()
+        plt.plot(window_size_ms * np.arange(len(rms)), 20*np.log10(rms))
+        plt.plot(window_size_ms * np.arange(len(rms)), smoothed)
+        plt.ylim([-150, 0])
+        plt.xlim([-100, len(rms) * window_size_ms])
+        plt.xlabel('Time (ms)')
+        plt.grid(True, which='major')
+        if show_plot:
+            plt.show()
+        if plot_file_path:
+            plt.savefig(plot_file_path)
+
+    return rms
+
+
+def tail_index(rms, rms_window_size):
     """Finds index in an impulse response after which there is nothing but noise left
 
     Args:
-        impulse_response: Impulse response data as numpy array
-        fs: Sampling rate
+        rms: RMS values for windows as numpy array
+        rms_window_size: Number of sample in each RMS window
 
     Returns:
         Tail index
     """
-    # Normalize
-    normalized = normalize(impulse_response, target_db=-0.1)
-
-    # Sliding window RMS
-    window_size_ms = 1
-    window_size = fs // 1000 * window_size_ms
-
-    # RMS windows
-    n = len(normalized) // window_size
-    windows = np.vstack(np.split(normalized[:n*window_size], n))
-    rms = np.sqrt(np.mean(np.square(windows), axis=1))
-    rms = normalize(rms, target_db=0.0)
-
-    # Smoothen data
-    for _ in range(2):
-        rms = signal.savgol_filter(rms, 251, 1)
-
     # Peak
     peak_index = np.argmax(rms)
 
@@ -177,21 +192,11 @@ def tail_index(impulse_response, fs):
     noise_floor = rms[i]
     noise_floor *= 2  # +6dB headroom
     tail_ind = np.argmax(rms < noise_floor)
-    tail_ms = tail_ind * window_size_ms
-
-    plt.plot(window_size_ms * np.arange(n), 20*np.log10(rms))
-    plt.plot([0, window_size_ms * len(rms)], [20*np.log10(noise_floor)]*2, color='red')
-    plt.plot([tail_ms]*2, [0, -120], color='red')
-    plt.ylim([-120, 0])
-    plt.xlim([-100, n * window_size_ms])
-    plt.xlabel('Time (ms)')
-    plt.grid(True, which='major')
-    plt.show()
 
     # Tail index in impulse response, rms has larger window size
-    tail_ind *= window_size
+    tail_ind *= rms_window_size
 
-    return tail_ind
+    return int(tail_ind)
 
 
 def crop_ir_head(left, right, speaker, fs):
@@ -383,6 +388,21 @@ def reorder_tracks(tracks, speakers):
     return reordered
 
 
+def spectrogram(sweep, fs, show_plot=False, plot_file_path=None):
+    if len(np.nonzero(sweep)[0]) == 0:
+        return
+
+    fig, ax = plt.subplots()
+    plt.specgram(sweep, Fs=fs)
+    plt.xlabel('Time (s)')
+    plt.ylabel('Frequency (Hz)')
+
+    if show_plot:
+        plt.show()
+    if plot_file_path:
+        plt.savefig(plot_file_path)
+
+
 def main(measure=False,
          equalize=False,
          dir_path=None,
@@ -425,6 +445,9 @@ def main(measure=False,
 
     # Normalize to -0.1 dB
     recording = normalize(recording, target_db=-0.1)
+
+    for i in range(recording.shape[0]):
+        spectrogram(recording[i, :], fs, plot_file_path=os.path.join(out_dir, 'spectrogram_{}.png'.format(IR_ORDER[i])))
 
     # Write multi-channel WAV file with sine sweeps for debugging
     write_wav(os.path.join(out_dir, 'preprocessed.wav'), fs, recording)
@@ -479,9 +502,15 @@ def main(measure=False,
     # Crop tails together
     # Find indices after which there is only noise in each track
     tail_indices = []
-    for track in cropped:
+    for i, track in enumerate(cropped):
         if len(np.nonzero(track)[0]) > 0:
-            tail_indices.append(tail_index(track, fs))
+            rms = impulse_response_decay(
+                track,
+                fs,
+                window_size_ms=1,
+                plot_file_path=os.path.join(out_dir, 'decay_{}_.png'.format(IR_ORDER[i]))
+            )
+            tail_indices.append(tail_index(rms, rms_window_size=fs / 1000))
     # Crop all tracks by last tail index
     tail_ind = max(tail_indices)
     for i in range(len(cropped)):
