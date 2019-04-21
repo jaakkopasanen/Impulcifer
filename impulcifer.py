@@ -434,7 +434,6 @@ def main(measure=False,
 
     # Estimate impulse responses by deconvolution
     impulse_responses = []
-    t = time()
     for i in range(recording.shape[0]):
         track = recording[i, :]
         if len(np.nonzero(track)[0]) > 0:
