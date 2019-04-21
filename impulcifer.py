@@ -152,6 +152,8 @@ def impulse_response_decay(impulse_response, fs, window_size_ms=1, show_plot=Fal
     windows = np.vstack(np.split(impulse_response[:n * window_size], n))
     rms = np.sqrt(np.mean(np.square(windows), axis=1))
 
+    rms[rms == 0.0] = 0.001
+
     # Smoothen data
     smoothed = 20*np.log10(rms)
     for _ in range(200):
@@ -160,7 +162,6 @@ def impulse_response_decay(impulse_response, fs, window_size_ms=1, show_plot=Fal
     if show_plot or plot_file_path:
         fig, ax = plt.subplots()
         plt.plot(window_size_ms * np.arange(len(rms)), 20*np.log10(rms))
-        plt.plot(window_size_ms * np.arange(len(rms)), smoothed)
         plt.ylim([-150, 0])
         plt.xlim([-100, len(rms) * window_size_ms])
         plt.xlabel('Time (ms)')
@@ -170,7 +171,7 @@ def impulse_response_decay(impulse_response, fs, window_size_ms=1, show_plot=Fal
         if plot_file_path:
             plt.savefig(plot_file_path)
 
-    return rms
+    return smoothed
 
 
 def tail_index(rms, rms_window_size):
@@ -487,6 +488,10 @@ def main(measure=False,
         right = impulse_responses[i + 1]
         speaker = SPEAKER_NAMES[i // 2]
         if len(np.nonzero(left)[0]) > 0 and len(np.nonzero(right)[0]) > 0:
+            impulse_response_decay(left, fs, window_size_ms=1,
+                                   plot_file_path=os.path.join(out_dir, 'decay_{}_.png'.format(IR_ORDER[i])))
+            impulse_response_decay(right, fs, window_size_ms=1,
+                                   plot_file_path=os.path.join(out_dir, 'decay_{}_.png'.format(IR_ORDER[i + 1])))
             # Crop head
             left, right = crop_ir_head(left, right, speaker, fs)
             cropped.append(left)
@@ -508,7 +513,6 @@ def main(measure=False,
                 track,
                 fs,
                 window_size_ms=1,
-                plot_file_path=os.path.join(out_dir, 'decay_{}_.png'.format(IR_ORDER[i]))
             )
             tail_indices.append(tail_index(rms, rms_window_size=fs / 1000))
     # Crop all tracks by last tail index
