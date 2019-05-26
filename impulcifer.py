@@ -12,6 +12,7 @@ from scipy.fftpack import fft
 from scipy.signal import fftconvolve, kaiser
 import pyfftw
 from time import time
+from autoeq.frequency_response import FrequencyResponse
 
 # https://en.wikipedia.org/wiki/Surround_sound
 SPEAKER_NAMES = ['FL', 'FR', 'FC', 'BL', 'BR', 'SL', 'SR']
@@ -40,6 +41,16 @@ SPEAKER_DELAYS = {
 
 
 def magnitude_response(x, fs):
+    """Calculates frequency magnitude response
+
+    Args:
+        x: Audio data
+        fs: Sampling rate
+
+    Returns:
+        - **f:** Frequencies
+        - **X:** Magnitudes
+    """
     nfft = len(x)
     df = fs / nfft
     f = np.arange(0, fs - df, df)
@@ -144,7 +155,7 @@ def normalize(x, target_db=-0.1):
     return x
 
 
-def impulse_response_decay(impulse_response, fs, window_size_ms=1, show_plot=False, plot_file_path=None):
+def impulse_response_decay(impulse_response, fs, window_size_ms=1, show_plot=False, plot_file_path=None, channel=None):
     # Sliding window RMS
     window_size = fs // 1000 * window_size_ms
 
@@ -167,6 +178,10 @@ def impulse_response_decay(impulse_response, fs, window_size_ms=1, show_plot=Fal
         plt.xlim([-100, len(rms) * window_size_ms])
         plt.xlabel('Time (ms)')
         plt.grid(True, which='major')
+        if channel is not None:
+            plt.title('Decay {}'.format(channel))
+        else:
+            plt.title('Decay')
         if plot_file_path:
             plt.savefig(plot_file_path)
         if show_plot:
@@ -181,21 +196,21 @@ def tail_index(rms, rms_window_size):
     """Finds index in an impulse response after which there is nothing but noise left
 
     Args:
-        rms: RMS values for windows as numpy array
+        rms: RMS values in dB for windows as numpy array
         rms_window_size: Number of samples in each RMS window
 
     Returns:
         Tail index
     """
     # Peak
-    peak_index = np.argmax(rms)
+    peak_index = int(np.argmax(rms))
 
     for i in range(peak_index+1, len(rms)):
         if rms[i] > rms[i-1]:
             break
     noise_floor = rms[i]
-    noise_floor *= 2  # +6dB headroom
-    tail_ind = np.argmax(rms < noise_floor)
+    noise_floor += 3  # +3dB headroom for algorithmic safety (this is a very simple algorith)
+    tail_ind = np.argmax(rms < noise_floor)  # argmax will select first matching index because all of them are boolean
 
     # Tail index in impulse response, rms has larger window size
     tail_ind *= rms_window_size
@@ -397,7 +412,7 @@ def reorder_tracks(tracks, speakers):
     return reordered
 
 
-def spectrogram(sweep, fs, show_plot=False, plot_file_path=None):
+def spectrogram(sweep, fs, show_plot=False, plot_file_path=None, channel=None):
     """Plots spectrogram for a logarithmic sine sweep recording.
 
     Args:
@@ -405,6 +420,7 @@ def spectrogram(sweep, fs, show_plot=False, plot_file_path=None):
         fs: Sampling rate
         show_plot: Show plot live?
         plot_file_path: Path to a file for saving the plot
+        channel: Channel name such as "FL-left"
 
     Returns:
         None
@@ -416,6 +432,10 @@ def spectrogram(sweep, fs, show_plot=False, plot_file_path=None):
     plt.specgram(sweep, Fs=fs)
     plt.xlabel('Time (s)')
     plt.ylabel('Frequency (Hz)')
+    if channel is not None:
+        plt.title('Spectrogram {}'.format(channel))
+    else:
+        plt.title('Spectrogram')
 
     if plot_file_path:
         plt.savefig(plot_file_path)
@@ -425,7 +445,7 @@ def spectrogram(sweep, fs, show_plot=False, plot_file_path=None):
         plt.close()
 
 
-def plot_ir(ir, fs, max_time=None, show_plot=False, plot_file_path=None):
+def plot_ir(ir, fs, max_time=None, show_plot=False, plot_file_path=None, channel=None):
     """Plots impulse response wave form.
 
     Args:
@@ -434,6 +454,7 @@ def plot_ir(ir, fs, max_time=None, show_plot=False, plot_file_path=None):
         max_time: Maximum time in seconds for cropping the tail.
         show_plot: Show plot live?
         plot_file_path: Path to a file for saving the plot
+        channel: Channel name such as "FL-left"
 
     Returns:
         None
@@ -450,6 +471,10 @@ def plot_ir(ir, fs, max_time=None, show_plot=False, plot_file_path=None):
     plt.xlabel('Time (ms)')
     plt.ylabel('Frequency (Hz)')
     plt.grid(True)
+    if channel is not None:
+        plt.title('Impulse response {c} {ms}'.format(c=channel, ms=max_time*1000))
+    else:
+        plt.title('Impulse response {c} {ms}'.format(ms=max_time*1000))
 
     if plot_file_path:
         plt.savefig(plot_file_path)
@@ -460,7 +485,7 @@ def plot_ir(ir, fs, max_time=None, show_plot=False, plot_file_path=None):
 
 
 def main(measure=False,
-         equalize=False,
+         compensate_headphones=False,
          dir_path=None,
          recording=None,
          headphones=None,
@@ -509,7 +534,7 @@ def main(measure=False,
     write_wav(os.path.join(out_dir, 'preprocessed.wav'), fs, recording)
 
     # Pad test signal to pre-processed recording length with zeros
-    test_signal = zero_pad(test_signal, recording.shape[1])
+    test_signal_zero_padded = zero_pad(test_signal, recording.shape[1])
 
     # Estimate impulse responses by deconvolution
     impulse_responses = []
@@ -519,7 +544,7 @@ def main(measure=False,
             # Run deconvolution
             impulse_response = deconv(
                 track,
-                test_signal,
+                test_signal_zero_padded,
                 method='inverse_filter',
                 fs=fs
             )
@@ -544,8 +569,10 @@ def main(measure=False,
         speaker = SPEAKER_NAMES[i // 2]
         if len(np.nonzero(left)[0]) > 0 and len(np.nonzero(right)[0]) > 0:
             impulse_response_decay(left, fs, window_size_ms=1, show_plot=False,
+                                   channel='{s}-{lr}'.format(s=speaker, lr='left'),
                                    plot_file_path=os.path.join(out_dir, 'decay_{}_.png'.format(IR_ORDER[i])))
             impulse_response_decay(right, fs, window_size_ms=1, show_plot=False,
+                                   channel='{s}-{lr}'.format(s=speaker, lr='right'),
                                    plot_file_path=os.path.join(out_dir, 'decay_{}_.png'.format(IR_ORDER[i + 1])))
             # Crop head
             left, right = crop_ir_head(left, right, speaker, fs)
@@ -558,9 +585,6 @@ def main(measure=False,
         else:
             raise ValueError('Left and right ear recording pair must be non-zero for both or neither.')
         i += 2
-
-    for i, ir in enumerate(cropped):
-        plot_ir(ir, fs, max_time=0.1, show_plot=False, plot_file_path=os.path.join(out_dir, IR_ORDER[i] + '.png'))
 
     # Crop tails together
     # Find indices after which there is only noise in each track
@@ -579,6 +603,21 @@ def main(measure=False,
         cropped[i] = cropped[i][:tail_ind]
     impulse_responses = np.vstack(cropped)
 
+    # Save IR waveform and frequency response plots
+    for i, ir in enumerate(cropped):
+        if len(np.nonzero(ir)[0]) > 0:
+            plot_ir(
+                ir,
+                fs,
+                max_time=0.1,
+                show_plot=False,
+                plot_file_path=os.path.join(out_dir, 'ir_{}.png'.format(IR_ORDER[i])),
+                channel=IR_ORDER[i]
+            )
+            f, m = magnitude_response(ir, fs)
+            fr = FrequencyResponse(name=IR_ORDER[i], frequency=f[1:], raw=m[1:])
+            fr.plot_graph(show=False, file_path=os.path.join(out_dir, 'fr_{}.png'.format(IR_ORDER[i])), color=None)
+
     # Write standard channel order HRIR
     write_wav(os.path.join(out_dir, 'hrir.wav'), fs, impulse_responses)
 
@@ -588,25 +627,69 @@ def main(measure=False,
     indices = [IR_ORDER.index(ch) for ch in hesuvi_order]
     write_wav(os.path.join(out_dir, 'hesuvi.wav'), fs, impulse_responses[indices, :])
 
-    if equalize:
+    if compensate_headphones:
         # Read WAV file
-        if type(headphones) == str:
-            headphones = AudioSegment.from_wav(headphones)
-        for i, ch in enumerate(headphones.split_to_mono()):
-            f, m = magnitude_response(ch.get_array_of_samples(), headphones.frame_rate)
-            track = ['frequency,raw']
-            for j in range(len(f)):
-                if f[j] > 0.0:
-                    track.append('{f:.2f},{m:.2f}'.format(f=f[j], m=m[j]))
-            with open(os.path.join(out_dir, 'headphones-{}.csv'.format('left' if i == 0 else 'right')), 'w') as file:
-                file.write('\n'.join(track))
+        fs_hp, hp_rec = read_wav(headphones)
+        # Headphones are measured one side at a time in a single sequence, split recording into tracks
+        hp_rec = split_recording(hp_rec, test_signal, ['FL', 'FR'], fs_hp, silence_length)
+        # Select 1st and 4th tracks which are left speaker - left microphone and right speaker - right microphone
+        hp_rec = hp_rec[[0, 3], :]
+        left_avg = None
+        eq_str = ''
+        for i in range(hp_rec.shape[0]):
+            track = hp_rec[i, :]
+            impulse_response = deconv(
+                track,
+                test_signal,
+                method='inverse_filter',
+                fs=fs
+            )
+            f, m = magnitude_response(impulse_response, fs_hp)
+            f = f[1:]
+            m = m[1:]
+            name = 'Left' if i == 0 else 'Right'
+            fr = FrequencyResponse(name=name, frequency=f, raw=m)
+            fr.interpolate()
+            fr_eq = FrequencyResponse(name=name+'_eq', frequency=fr.frequency, raw=fr.raw)
+            fr_eq.center()
+            fr_eq.compensate(
+                FrequencyResponse(name='zero', frequency=fr.frequency, raw=np.zeros(len(fr.frequency))),
+                min_mean_error=False
+            )
+            fr_eq.smoothen()
+            fr_eq.equalize(max_gain=20, treble_f_lower=20000, treble_f_upper=22000)
+
+            fr.equalization = fr_eq.equalization[:]
+            fr.equalized_raw = fr.raw + fr.equalization
+            avg = np.mean(fr.equalized_raw[np.logical_and(fr.frequency >= 100, fr.frequency <= 10000)])
+            if name == 'Left':
+                left_avg = avg
+            else:
+                fr.equalization += left_avg - avg
+                fr.equalized_raw += left_avg - avg
+
+            if name == 'Left':
+                eq_str += 'Channel: L\n'
+            else:
+                eq_str += 'Channel: R\n'
+            print(fr.equalization[400])
+            eq_str += fr.write_eqapo_graphic_eq(
+                os.path.join(out_dir, 'Headphones GraphicEQ {}.txt'.format(name)),
+                f_step=1.03
+            )
+            eq_str += '\n'
+
+            fr.plot_graph(show=False, file_path=os.path.join(out_dir, 'Headphones {}.png'.format(name)), a_min=-40, a_max=20)
+
+        with open(os.path.join(out_dir, 'Headphones GraphicEQ.txt'), 'w') as f:
+            f.write(eq_str)
 
 
 def create_cli():
     arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument('--measure', action='store_true',
                             help='Measure sine sweeps? Uses default audio output and input devices.')
-    arg_parser.add_argument('--equalize', action='store_true',
+    arg_parser.add_argument('--compensate_headphones', action='store_true',
                             help='Produce CSV file for AutoEQ from headphones sine sweep recordgin?')
     arg_parser.add_argument('--dir_path', type=str, help='Path to directory for recordings and outputs.')
     arg_parser.add_argument('--test_signal', type=str, help='File path to sine sweep test signal.')

@@ -2,3 +2,4 @@ matplotlib
 scipy
 pydub
 pyfftw
+git+https://github.com/jaakkopasanen/autoeq-pkg
