@@ -3,13 +3,10 @@
 import os
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.mlab as mlab
-from matplotlib import ticker
 from pydub import AudioSegment
 import argparse
 from scipy import signal
-from scipy.fftpack import fft
-from scipy.signal import fftconvolve, kaiser
+from scipy.signal import fftconvolve, kaiser, convolve
 import pyfftw
 from time import time
 from autoeq.frequency_response import FrequencyResponse
@@ -514,6 +511,18 @@ def main(measure=False,
         # Output directory does not exist, create it
         os.makedirs(out_dir, exist_ok=True)
 
+    # TODO
+    plots = dict()
+    for ch_name in IR_ORDER:
+        fig, ax = plt.subplots(2, 2)
+        plots[ch_name] = {
+            'figure': fig,
+            'spectrogram': ax[0],
+            'ir': ax[1],
+            'fr': ax[2],
+            'decay': ax[3]
+        }
+
     # Logarithmic sine sweep measurement
     if measure:  # TODO
         raise NotImplementedError('Measurement is not yet implemented.')
@@ -528,6 +537,7 @@ def main(measure=False,
     recording = normalize(recording, target_db=-0.1)
 
     for i in range(recording.shape[0]):
+        # TODO: Pass fig and ax
         spectrogram(recording[i, :], fs, plot_file_path=os.path.join(out_dir, 'spectrogram_{}.png'.format(IR_ORDER[i])))
 
     # Write multi-channel WAV file with sine sweeps for debugging
@@ -591,6 +601,7 @@ def main(measure=False,
     tail_indices = []
     for i, track in enumerate(cropped):
         if len(np.nonzero(track)[0]) > 0:
+            # TODO: Pass fig and ax
             rms = impulse_response_decay(
                 track,
                 fs,
@@ -606,6 +617,7 @@ def main(measure=False,
     # Save IR waveform and frequency response plots
     for i, ir in enumerate(cropped):
         if len(np.nonzero(ir)[0]) > 0:
+            # TODO: Pass fig and ax
             plot_ir(
                 ir,
                 fs,
@@ -616,16 +628,8 @@ def main(measure=False,
             )
             f, m = magnitude_response(ir, fs)
             fr = FrequencyResponse(name=IR_ORDER[i], frequency=f[1:], raw=m[1:])
+            # TODO: Pass fig and ax
             fr.plot_graph(show=False, file_path=os.path.join(out_dir, 'fr_{}.png'.format(IR_ORDER[i])), color=None)
-
-    # Write standard channel order HRIR
-    write_wav(os.path.join(out_dir, 'hrir.wav'), fs, impulse_responses)
-
-    # Write HeSuVi channel order HRIR
-    hesuvi_order = ['FL-left', 'FL-right', 'SL-left', 'SL-right', 'BL-left', 'BL-right', 'FC-left', 'FR-right',
-                    'FR-left', 'SR-right', 'SR-left', 'BR-right', 'BR-left', 'FC-right']
-    indices = [IR_ORDER.index(ch) for ch in hesuvi_order]
-    write_wav(os.path.join(out_dir, 'hesuvi.wav'), fs, impulse_responses[indices, :])
 
     if compensate_headphones:
         # Read WAV file
@@ -635,7 +639,6 @@ def main(measure=False,
         # Select 1st and 4th tracks which are left speaker - left microphone and right speaker - right microphone
         hp_rec = hp_rec[[0, 3], :]
         left_avg = None
-        eq_str = ''
         for i in range(hp_rec.shape[0]):
             track = hp_rec[i, :]
             impulse_response = deconv(
@@ -668,22 +671,23 @@ def main(measure=False,
                 fr.equalization += left_avg - avg
                 fr.equalized_raw += left_avg - avg
 
-            if name == 'Left':
-                eq_str += 'Channel: L\n'
-            else:
-                eq_str += 'Channel: R\n'
-            print(fr.equalization[400])
-            eq_str += fr.write_eqapo_graphic_eq(
-                os.path.join(out_dir, 'Headphones GraphicEQ {}.txt'.format(name)),
-                f_step=1.03
-            )
-            eq_str += '\n'
+            eq_ir = fr.minimum_phase_impulse_response(fs=fs, f_res=2)
+            for j in range(impulse_responses.shape[0]):
+                if (name == 'Left' and j % 2) or (name == 'Right' and not j % 2):
+                    continue
+                # FIXME: This produces silence
+                impulse_responses[j, :] = convolve(impulse_responses[j, :], eq_ir, mode='same')
 
             fr.plot_graph(show=False, file_path=os.path.join(out_dir, 'Headphones {}.png'.format(name)), a_min=-40, a_max=20)
 
-        with open(os.path.join(out_dir, 'Headphones GraphicEQ.txt'), 'w') as f:
-            f.write(eq_str)
+    # Write standard channel order HRIR
+    write_wav(os.path.join(out_dir, 'hrir.wav'), fs, impulse_responses)
 
+    # Write HeSuVi channel order HRIR
+    hesuvi_order = ['FL-left', 'FL-right', 'SL-left', 'SL-right', 'BL-left', 'BL-right', 'FC-left', 'FR-right',
+                    'FR-left', 'SR-right', 'SR-left', 'BR-right', 'BR-left', 'FC-right']
+    indices = [IR_ORDER.index(ch) for ch in hesuvi_order]
+    write_wav(os.path.join(out_dir, 'hesuvi.wav'), fs, impulse_responses[indices, :])
 
 def create_cli():
     arg_parser = argparse.ArgumentParser()

@@ -15,6 +15,7 @@ class ImpulseResponseEstimator(object):
 
         # Total length in samples
         self.T = fs*duration
+        print(self.T)
         self.w1 = low / self.fs * 2*np.pi
         self.w2 = high / self.fs * 2*np.pi
 
