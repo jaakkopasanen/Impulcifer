@@ -27,14 +27,15 @@ for _ch in SPEAKER_NAMES:
 # Distance from side left speaker (SL) to left ear is smaller than distance from front left (FL) to left ear
 # Two samples (@48kHz) added to each for head room
 # These are used for synchronizing impulse responses
+# TODO: Remove the two samples from these delays and add the headroom in the code
 SPEAKER_DELAYS = {
-    'FL': 0.1487,
-    'FR': 0.1487,
-    'FC': 0.2557,
-    'BL': 0.1487,  # TODO: Confirm this
-    'BR': 0.1487,  # TODO: Confirm this
-    'SL': 0.0417,
-    'SR': 0.0417,
+    'FL': 0.107,
+    'FR': 0.107,
+    'FC': 0.214,
+    'BL': 0.107,  # TODO: Confirm this
+    'BR': 0.107,  # TODO: Confirm this
+    'SL': 0.0,
+    'SR': 0.0,
 }
 
 
@@ -166,10 +167,12 @@ def impulse_response_decay(impulse_response, fs, window_size_ms=1, show_plot=Fal
         plt.xlim([-100, len(rms) * window_size_ms])
         plt.xlabel('Time (ms)')
         plt.grid(True, which='major')
-        if show_plot:
-            plt.show()
         if plot_file_path:
             plt.savefig(plot_file_path)
+        if show_plot:
+            plt.show()
+        else:
+            plt.close()
 
     return smoothed
 
@@ -179,7 +182,7 @@ def tail_index(rms, rms_window_size):
 
     Args:
         rms: RMS values for windows as numpy array
-        rms_window_size: Number of sample in each RMS window
+        rms_window_size: Number of samples in each RMS window
 
     Returns:
         Tail index
@@ -200,13 +203,13 @@ def tail_index(rms, rms_window_size):
     return int(tail_ind)
 
 
-def crop_ir_head(left, right, speaker, fs):
+def crop_ir_head(left, right, speaker, fs, head_ms=1):
     """Crops out silent head of left and right ear impulse responses and sets delay to correct value according to
     speaker channel
 
     Args:
-        left: AudioSegment for left ear impulse response
-        right: AudioSegment for right ear impulse response
+        left: Left ear impulse response
+        right: Right ear impulse response
         speaker: Speaker channel name
         fs: Sampling rate
 
@@ -222,7 +225,9 @@ def crop_ir_head(left, right, speaker, fs):
     itd = np.abs(peak_left - peak_right)
 
     # Speaker channel delay
-    delay = int(np.round(SPEAKER_DELAYS[speaker] / 1000 * fs))  # Channel delay in samples
+    head = head_ms * fs // 1000
+    delay = int(np.round(SPEAKER_DELAYS[speaker] / 1000 * fs)) + head  # Channel delay in samples
+
     if peak_left < peak_right:
         # Delay to left ear is smaller, this is must left side speaker
         if speaker[1] == 'R':
@@ -243,11 +248,14 @@ def crop_ir_head(left, right, speaker, fs):
         right = right[peak_right-delay:]
 
     # Make sure impulse response starts from silence
-    # TODO: check if this is necessary
-    left[0] *= 0.0
-    left[1] *= 0.5
-    right[0] *= 0.0
-    right[1] *= 0.5
+    # TODO: This should by Kaiser (or other window function) and have more samples
+    window = kaiser(head*2, 16)[:head]
+    left[:head] *= window
+    right[:head] *= window
+    # left[0] *= 0.0
+    # left[1] *= 0.5
+    # right[0] *= 0.0
+    # right[1] *= 0.5
 
     return left, right
 
@@ -390,6 +398,17 @@ def reorder_tracks(tracks, speakers):
 
 
 def spectrogram(sweep, fs, show_plot=False, plot_file_path=None):
+    """Plots spectrogram for a logarithmic sine sweep recording.
+
+    Args:
+        sweep: Recording data
+        fs: Sampling rate
+        show_plot: Show plot live?
+        plot_file_path: Path to a file for saving the plot
+
+    Returns:
+        None
+    """
     if len(np.nonzero(sweep)[0]) == 0:
         return
 
@@ -398,10 +417,46 @@ def spectrogram(sweep, fs, show_plot=False, plot_file_path=None):
     plt.xlabel('Time (s)')
     plt.ylabel('Frequency (Hz)')
 
-    if show_plot:
-        plt.show()
     if plot_file_path:
         plt.savefig(plot_file_path)
+    if show_plot:
+        plt.show()
+    else:
+        plt.close()
+
+
+def plot_ir(ir, fs, max_time=None, show_plot=False, plot_file_path=None):
+    """Plots impulse response wave form.
+
+    Args:
+        ir: Impulse response data
+        fs: Sampling rate
+        max_time: Maximum time in seconds for cropping the tail.
+        show_plot: Show plot live?
+        plot_file_path: Path to a file for saving the plot
+
+    Returns:
+        None
+    """
+    if len(np.nonzero(ir)[0]) == 0:
+        return
+
+    if max_time is None:
+        max_time = len(ir) / fs
+    ir = ir[:int(max_time * fs)]
+
+    fig, ax = plt.subplots()
+    plt.plot(np.arange(0, len(ir)/fs*1000, 1000/fs), ir)
+    plt.xlabel('Time (ms)')
+    plt.ylabel('Frequency (Hz)')
+    plt.grid(True)
+
+    if plot_file_path:
+        plt.savefig(plot_file_path)
+    if show_plot:
+        plt.show()
+    else:
+        plt.close()
 
 
 def main(measure=False,
@@ -488,9 +543,9 @@ def main(measure=False,
         right = impulse_responses[i + 1]
         speaker = SPEAKER_NAMES[i // 2]
         if len(np.nonzero(left)[0]) > 0 and len(np.nonzero(right)[0]) > 0:
-            impulse_response_decay(left, fs, window_size_ms=1,
+            impulse_response_decay(left, fs, window_size_ms=1, show_plot=False,
                                    plot_file_path=os.path.join(out_dir, 'decay_{}_.png'.format(IR_ORDER[i])))
-            impulse_response_decay(right, fs, window_size_ms=1,
+            impulse_response_decay(right, fs, window_size_ms=1, show_plot=False,
                                    plot_file_path=os.path.join(out_dir, 'decay_{}_.png'.format(IR_ORDER[i + 1])))
             # Crop head
             left, right = crop_ir_head(left, right, speaker, fs)
@@ -503,6 +558,9 @@ def main(measure=False,
         else:
             raise ValueError('Left and right ear recording pair must be non-zero for both or neither.')
         i += 2
+
+    for i, ir in enumerate(cropped):
+        plot_ir(ir, fs, max_time=0.1, show_plot=False, plot_file_path=os.path.join(out_dir, IR_ORDER[i] + '.png'))
 
     # Crop tails together
     # Find indices after which there is only noise in each track
