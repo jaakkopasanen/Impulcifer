@@ -1,5 +1,5 @@
 from scipy.fftpack import fft
-from scipy.signal import fftconvolve, kaiser
+from scipy.signal import fftconvolve, kaiser, hanning
 import numpy as np
 
 
@@ -10,12 +10,12 @@ class ImpulseResponseEstimator(object):
     Angelo Farina
     """
 
-    def __init__(self, duration=5.0, low=20.0, high=20000.0, fs=44100.0):
+    def __init__(self, duration=5.0, low=20.0, fs=44100.0):
         self.fs = fs
+        high = self.fs / 2
 
         # Total length in samples
         self.T = fs*duration
-        print(self.T)
         self.w1 = low / self.fs * 2*np.pi
         self.w2 = high / self.fs * 2*np.pi
 
@@ -58,14 +58,19 @@ class ImpulseResponseEstimator(object):
         impulse = np.sin(freqs)
 
         # Apply exponential signal on the beginning and the end of the probe signal.
-        window_len = 2500
-        win = kaiser(window_len, 16)
-        win_start = win[:int(win.shape[0]/2)]
-        impulse[:win_start.shape[0]] *= win_start
-        window_len = 2500
-        win = kaiser(window_len, 14)
-        win_end = win[int(win.shape[0]/2):]
-        impulse[-win_end.shape[0]:] *= win_end
+        # window_len = 2500
+        # win = kaiser(window_len, 16)
+        # win_start = win[:int(win.shape[0]/2)]
+        # impulse[:win_start.shape[0]] *= win_start
+        # window_len = 2500
+        # win = kaiser(window_len, 14)
+        # win_end = win[int(win.shape[0]/2):]
+        # impulse[-win_end.shape[0]:] *= win_end
+        window_len = 2 * int(self.fs * 0.06)
+        win = hanning(window_len)
+        win = np.concatenate([win[:window_len//2], np.ones(len(impulse) - window_len), win[window_len//2:]])
+        #win = np.concatenate([win[:window_len//2], np.ones(len(impulse) - window_len // 2)])
+        impulse *= win
 
         return impulse
 

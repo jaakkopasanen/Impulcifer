@@ -1,6 +1,7 @@
 # Impulcifer
 
 #### TODO:
+- Better test signal
 - Use ImpulseResponseEstimator
 - Waterfall plot
 - Fix headphone compensation FIR convolution

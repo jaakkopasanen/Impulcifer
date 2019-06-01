@@ -463,12 +463,12 @@ def plot_ir(ir, fs, fig=None, ax=None, max_time=None, show_plot=False, plot_file
     ax.set_xlabel('Time (ms)')
     ax.set_ylabel('Frequency (Hz)')
     ax.grid(True)
-    ax.set_title('Impulse response {ms}'.format(ms=int(max_time*1000)))
+    ax.set_title('Impulse response {ms} ms'.format(ms=int(max_time*1000)))
 
     if plot_file_path:
         fig.savefig(plot_file_path)
     if show_plot:
-        fig.show()
+        plt.show()
 
 
 def main(measure=False,
@@ -697,7 +697,7 @@ def main(measure=False,
             )
             fr_eq.equalize(max_gain=20, treble_f_lower=20000, treble_f_upper=22000)
 
-            fr.equalization = fr_eq.equalization[:]
+            fr.equalization = fr_eq.equalization.copy()
             fr.equalized_raw = fr.raw + fr.equalization
             avg = np.mean(fr.equalized_raw[np.logical_and(fr.frequency >= 100, fr.frequency <= 10000)])
             if name == 'Left':

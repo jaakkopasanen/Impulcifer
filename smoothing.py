@@ -3,6 +3,7 @@
 from impulcifer import read_wav, magnitude_response
 from autoeq.frequency_response import FrequencyResponse
 import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
 
 
 def main():
@@ -34,8 +35,16 @@ def main():
             treble_f_lower=100,
             treble_f_upper=10000
         )
-    fr.plot_graph(show=True, close=False, smoothed=False, color=None)
-    plt.plot(fr.frequency, fr.smoothed, linewidth=2)
+    fig, ax = plt.subplots()
+    plt.plot(fr.frequency, fr.raw, linewidth=0.5)
+    plt.plot(fr.frequency, fr.smoothed, linewidth=1)
+    plt.xlabel('Frequency (Hz)')
+    plt.semilogx()
+    plt.xlim([20, 20000])
+    plt.ylabel('Amplitude (dBr)')
+    plt.grid(True, which='major')
+    plt.grid(True, which='minor')
+    ax.xaxis.set_major_formatter(ticker.StrMethodFormatter('{x:.0f}'))
     plt.show()
 
 
