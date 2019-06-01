@@ -3,12 +3,14 @@
 import os
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
 from pydub import AudioSegment
 import argparse
 from scipy import signal
 from scipy.signal import fftconvolve, kaiser, convolve
 import pyfftw
 from time import time
+from PIL import Image
 from autoeq.frequency_response import FrequencyResponse
 
 # https://en.wikipedia.org/wiki/Surround_sound
@@ -152,7 +154,7 @@ def normalize(x, target_db=-0.1):
     return x
 
 
-def impulse_response_decay(impulse_response, fs, window_size_ms=1, show_plot=False, plot_file_path=None, channel=None):
+def impulse_response_decay(impulse_response, fs, window_size_ms=1, fig=None, ax=None, show_plot=False, plot_file_path=None):
     # Sliding window RMS
     window_size = fs // 1000 * window_size_ms
 
@@ -168,23 +170,19 @@ def impulse_response_decay(impulse_response, fs, window_size_ms=1, show_plot=Fal
     for _ in range(200):
         smoothed = signal.savgol_filter(smoothed, 11, 1)
 
-    if show_plot or plot_file_path:
-        fig, ax = plt.subplots()
-        plt.plot(window_size_ms * np.arange(len(rms)), 20*np.log10(rms))
-        plt.ylim([-150, 0])
-        plt.xlim([-100, len(rms) * window_size_ms])
-        plt.xlabel('Time (ms)')
-        plt.grid(True, which='major')
-        if channel is not None:
-            plt.title('Decay {}'.format(channel))
-        else:
-            plt.title('Decay')
+    if show_plot or plot_file_path or fig:
+        if fig is None:
+            fig, ax = plt.subplots()
+        ax.plot(window_size_ms * np.arange(len(rms)), 20*np.log10(rms), linewidth=0.5)
+        ax.set_ylim([-150, 0])
+        ax.set_xlim([-100, len(rms) * window_size_ms])
+        ax.set_xlabel('Time (ms)')
+        ax.grid(True, which='major')
+        ax.set_title('Decay')
         if plot_file_path:
-            plt.savefig(plot_file_path)
+            fig.savefig(plot_file_path)
         if show_plot:
-            plt.show()
-        else:
-            plt.close()
+            fig.show()
 
     return smoothed
 
@@ -409,15 +407,16 @@ def reorder_tracks(tracks, speakers):
     return reordered
 
 
-def spectrogram(sweep, fs, show_plot=False, plot_file_path=None, channel=None):
+def spectrogram(sweep, fs, fig=None, ax=None, show_plot=False, plot_file_path=None):
     """Plots spectrogram for a logarithmic sine sweep recording.
 
     Args:
         sweep: Recording data
         fs: Sampling rate
+        fig: Figure
+        ax: Axis
         show_plot: Show plot live?
         plot_file_path: Path to a file for saving the plot
-        channel: Channel name such as "FL-left"
 
     Returns:
         None
@@ -425,24 +424,20 @@ def spectrogram(sweep, fs, show_plot=False, plot_file_path=None, channel=None):
     if len(np.nonzero(sweep)[0]) == 0:
         return
 
-    fig, ax = plt.subplots()
+    if fig is None:
+        fig, ax = plt.subplots()
     plt.specgram(sweep, Fs=fs)
-    plt.xlabel('Time (s)')
-    plt.ylabel('Frequency (Hz)')
-    if channel is not None:
-        plt.title('Spectrogram {}'.format(channel))
-    else:
-        plt.title('Spectrogram')
+    ax.set_xlabel('Time (s)')
+    ax.set_ylabel('Frequency (Hz)')
+    ax.set_title('Spectrogram')
 
     if plot_file_path:
-        plt.savefig(plot_file_path)
+        fig.savefig(plot_file_path)
     if show_plot:
-        plt.show()
-    else:
-        plt.close()
+        fig.show()
 
 
-def plot_ir(ir, fs, max_time=None, show_plot=False, plot_file_path=None, channel=None):
+def plot_ir(ir, fs, fig=None, ax=None, max_time=None, show_plot=False, plot_file_path=None):
     """Plots impulse response wave form.
 
     Args:
@@ -451,7 +446,6 @@ def plot_ir(ir, fs, max_time=None, show_plot=False, plot_file_path=None, channel
         max_time: Maximum time in seconds for cropping the tail.
         show_plot: Show plot live?
         plot_file_path: Path to a file for saving the plot
-        channel: Channel name such as "FL-left"
 
     Returns:
         None
@@ -463,22 +457,18 @@ def plot_ir(ir, fs, max_time=None, show_plot=False, plot_file_path=None, channel
         max_time = len(ir) / fs
     ir = ir[:int(max_time * fs)]
 
-    fig, ax = plt.subplots()
-    plt.plot(np.arange(0, len(ir)/fs*1000, 1000/fs), ir)
-    plt.xlabel('Time (ms)')
-    plt.ylabel('Frequency (Hz)')
-    plt.grid(True)
-    if channel is not None:
-        plt.title('Impulse response {c} {ms}'.format(c=channel, ms=max_time*1000))
-    else:
-        plt.title('Impulse response {c} {ms}'.format(ms=max_time*1000))
+    if fig is None:
+        fig, ax = plt.subplots()
+    ax.plot(np.arange(0, len(ir)/fs*1000, 1000/fs), ir, linewidth=0.5)
+    ax.set_xlabel('Time (ms)')
+    ax.set_ylabel('Frequency (Hz)')
+    ax.grid(True)
+    ax.set_title('Impulse response {ms}'.format(ms=int(max_time*1000)))
 
     if plot_file_path:
-        plt.savefig(plot_file_path)
+        fig.savefig(plot_file_path)
     if show_plot:
-        plt.show()
-    else:
-        plt.close()
+        fig.show()
 
 
 def main(measure=False,
@@ -511,16 +501,17 @@ def main(measure=False,
         # Output directory does not exist, create it
         os.makedirs(out_dir, exist_ok=True)
 
-    # TODO
     plots = dict()
     for ch_name in IR_ORDER:
-        fig, ax = plt.subplots(2, 2)
+        fig, ax = plt.subplots(2, 2, num=ch_name)
+        plt.suptitle(ch_name)
+        fig.set_size_inches(11.69, 8.27)
         plots[ch_name] = {
             'figure': fig,
-            'spectrogram': ax[0],
-            'ir': ax[1],
-            'fr': ax[2],
-            'decay': ax[3]
+            'ir': ax[0, 0],
+            'fr': ax[0, 1],
+            'decay': ax[1, 0],
+            'spectrogram': ax[1, 1],
         }
 
     # Logarithmic sine sweep measurement
@@ -536,9 +527,13 @@ def main(measure=False,
     # Normalize to -0.1 dB
     recording = normalize(recording, target_db=-0.1)
 
-    for i in range(recording.shape[0]):
-        # TODO: Pass fig and ax
-        spectrogram(recording[i, :], fs, plot_file_path=os.path.join(out_dir, 'spectrogram_{}.png'.format(IR_ORDER[i])))
+    # for i in range(recording.shape[0]):
+    #     spectrogram(
+    #         recording[i, :],
+    #         fs,
+    #         fig=plots[IR_ORDER[i]]['figure'],
+    #         ax=plots[IR_ORDER[i]]['spectrogram']
+    #     )
 
     # Write multi-channel WAV file with sine sweeps for debugging
     write_wav(os.path.join(out_dir, 'preprocessed.wav'), fs, recording)
@@ -578,12 +573,22 @@ def main(measure=False,
         right = impulse_responses[i + 1]
         speaker = SPEAKER_NAMES[i // 2]
         if len(np.nonzero(left)[0]) > 0 and len(np.nonzero(right)[0]) > 0:
-            impulse_response_decay(left, fs, window_size_ms=1, show_plot=False,
-                                   channel='{s}-{lr}'.format(s=speaker, lr='left'),
-                                   plot_file_path=os.path.join(out_dir, 'decay_{}_.png'.format(IR_ORDER[i])))
-            impulse_response_decay(right, fs, window_size_ms=1, show_plot=False,
-                                   channel='{s}-{lr}'.format(s=speaker, lr='right'),
-                                   plot_file_path=os.path.join(out_dir, 'decay_{}_.png'.format(IR_ORDER[i + 1])))
+            impulse_response_decay(
+                left,
+                fs,
+                fig=plots[IR_ORDER[i]]['figure'],
+                ax=plots[IR_ORDER[i]]['decay'],
+                window_size_ms=1,
+                show_plot=False,
+            )
+            impulse_response_decay(
+                right,
+                fs,
+                fig=plots[IR_ORDER[i+1]]['figure'],
+                ax=plots[IR_ORDER[i+1]]['decay'],
+                window_size_ms=1,
+                show_plot=False,
+            )
             # Crop head
             left, right = crop_ir_head(left, right, speaker, fs)
             cropped.append(left)
@@ -601,7 +606,6 @@ def main(measure=False,
     tail_indices = []
     for i, track in enumerate(cropped):
         if len(np.nonzero(track)[0]) > 0:
-            # TODO: Pass fig and ax
             rms = impulse_response_decay(
                 track,
                 fs,
@@ -614,22 +618,45 @@ def main(measure=False,
         cropped[i] = cropped[i][:tail_ind]
     impulse_responses = np.vstack(cropped)
 
+    # Set decay plot X-max to 1000ms after IR tail crop point
+    for ch, obj in plots.items():
+        obj['decay'].set_xlim(obj['decay'].get_xlim()[0], 1000 * tail_ind // fs + 1000)
+
     # Save IR waveform and frequency response plots
     for i, ir in enumerate(cropped):
         if len(np.nonzero(ir)[0]) > 0:
-            # TODO: Pass fig and ax
             plot_ir(
                 ir,
                 fs,
+                fig=plots[IR_ORDER[i]]['figure'],
+                ax=plots[IR_ORDER[i]]['ir'],
                 max_time=0.1,
                 show_plot=False,
-                plot_file_path=os.path.join(out_dir, 'ir_{}.png'.format(IR_ORDER[i])),
-                channel=IR_ORDER[i]
             )
             f, m = magnitude_response(ir, fs)
-            fr = FrequencyResponse(name=IR_ORDER[i], frequency=f[1:], raw=m[1:])
-            # TODO: Pass fig and ax
-            fr.plot_graph(show=False, file_path=os.path.join(out_dir, 'fr_{}.png'.format(IR_ORDER[i])), color=None)
+            fr = FrequencyResponse(name='Frequency response', frequency=f[1:], raw=m[1:])
+            fr.interpolate()
+            fr.smoothen(
+                window_size=1 / 3,
+                iterations=1,
+                treble_window_size=1 / 6,
+                treble_iterations=1,
+                treble_f_lower=100,
+                treble_f_upper=1000,
+
+            )
+            ax = plots[IR_ORDER[i]]['fr']
+            ax.set_xlabel('Frequency (Hz)')
+            ax.semilogx()
+            ax.set_xlim([20, 20e3])
+            ax.set_ylabel('Amplitude (dBr)')
+            ax.set_title(fr.name)
+            ax.grid(True, which='major')
+            ax.grid(True, which='minor')
+            ax.xaxis.set_major_formatter(ticker.StrMethodFormatter('{x:.0f}'))
+            ax.plot(fr.frequency, fr.raw, linewidth=0.5)
+            ax.plot(fr.frequency, fr.smoothed, linewidth=1)
+            ax.legend(['Raw', 'Smoothed'], fontsize=8)
 
     if compensate_headphones:
         # Read WAV file
@@ -659,7 +686,15 @@ def main(measure=False,
                 FrequencyResponse(name='zero', frequency=fr.frequency, raw=np.zeros(len(fr.frequency))),
                 min_mean_error=False
             )
-            fr_eq.smoothen()
+            fr_eq.smoothen(
+                window_size=1 / 3,
+                iterations=1,
+                treble_window_size=1 / 6,
+                treble_iterations=1,
+                treble_f_lower=100,
+                treble_f_upper=1000,
+
+            )
             fr_eq.equalize(max_gain=20, treble_f_lower=20000, treble_f_upper=22000)
 
             fr.equalization = fr_eq.equalization[:]
@@ -688,6 +723,16 @@ def main(measure=False,
                     'FR-left', 'SR-right', 'SR-left', 'BR-right', 'BR-left', 'FC-right']
     indices = [IR_ORDER.index(ch) for ch in hesuvi_order]
     write_wav(os.path.join(out_dir, 'hesuvi.wav'), fs, impulse_responses[indices, :])
+
+    # Save plots
+    for ch, obj in plots.items():
+        if obj['ir'].lines or obj['fr'].lines or obj['spectrogram'].lines or obj['decay'].lines:
+            file_path = os.path.join(out_dir, ch + '.png')
+            obj['figure'].savefig(file_path, dpi=480, bbox_inches='tight')
+            im = Image.open(file_path)
+            im = im.convert('P', palette=Image.ADAPTIVE, colors=60)
+            im.save(file_path, optimize=True)
+
 
 def create_cli():
     arg_parser = argparse.ArgumentParser()
