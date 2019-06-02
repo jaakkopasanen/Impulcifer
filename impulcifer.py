@@ -11,6 +11,7 @@ from scipy.signal import fftconvolve, kaiser, convolve
 import pyfftw
 from time import time
 from PIL import Image
+from impulse_response_estimator import ImpulseResponseEstimator
 from autoeq.frequency_response import FrequencyResponse
 
 # https://en.wikipedia.org/wiki/Surround_sound
@@ -369,6 +370,8 @@ def read_wav(file_path):
 def write_wav(file_path, fs, data):
     """Writes WAV file."""
     tracks = []
+    if len(data.shape) == 1:
+        data = np.expand_dims(data, 0)
     for i in range(data.shape[0]):
         tracks.append(AudioSegment(
             np.multiply(data[i, :], 2 ** 31).astype('int32').tobytes(),
@@ -505,7 +508,7 @@ def main(measure=False,
     for ch_name in IR_ORDER:
         fig, ax = plt.subplots(2, 2, num=ch_name)
         plt.suptitle(ch_name)
-        fig.set_size_inches(11.69, 8.27)
+        fig.set_size_inches(15, 10)
         plots[ch_name] = {
             'figure': fig,
             'ir': ax[0, 0],
@@ -538,27 +541,20 @@ def main(measure=False,
     # Write multi-channel WAV file with sine sweeps for debugging
     write_wav(os.path.join(out_dir, 'preprocessed.wav'), fs, recording)
 
-    # Pad test signal to pre-processed recording length with zeros
-    test_signal_zero_padded = zero_pad(test_signal, recording.shape[1])
-
     # Estimate impulse responses by deconvolution
+    # TODO: duration and low should be parameters
+    estimator = ImpulseResponseEstimator(duration=5, low=10, fs=fs)
     impulse_responses = []
     for i in range(recording.shape[0]):
         track = recording[i, :]
         if len(np.nonzero(track)[0]) > 0:
             # Run deconvolution
-            impulse_response = deconv(
-                track,
-                test_signal_zero_padded,
-                method='inverse_filter',
-                fs=fs
-            )
-
+            impulse_response = estimator.estimate(track)
             # Add to responses
             impulse_responses.append(impulse_response)
         else:
             # Silent track
-            impulse_responses.append(np.zeros(recording.shape[1]))
+            impulse_responses.append(np.zeros(estimator.test_signal.shape[0] + 1))
     impulse_responses = np.vstack(impulse_responses)
 
     # Save impulse responses to file for debugging
@@ -658,71 +654,23 @@ def main(measure=False,
             ax.plot(fr.frequency, fr.smoothed, linewidth=1)
             ax.legend(['Raw', 'Smoothed'], fontsize=8)
 
-    if compensate_headphones:
-        # Read WAV file
-        fs_hp, hp_rec = read_wav(headphones)
-        # Headphones are measured one side at a time in a single sequence, split recording into tracks
-        hp_rec = split_recording(hp_rec, test_signal, ['FL', 'FR'], fs_hp, silence_length)
-        # Select 1st and 4th tracks which are left speaker - left microphone and right speaker - right microphone
-        hp_rec = hp_rec[[0, 3], :]
-        left_avg = None
-        for i in range(hp_rec.shape[0]):
-            track = hp_rec[i, :]
-            impulse_response = deconv(
-                track,
-                test_signal,
-                method='inverse_filter',
-                fs=fs
-            )
-            f, m = magnitude_response(impulse_response, fs_hp)
-            f = f[1:]
-            m = m[1:]
-            name = 'Left' if i == 0 else 'Right'
-            fr = FrequencyResponse(name=name, frequency=f, raw=m)
-            fr.interpolate()
-            fr_eq = FrequencyResponse(name=name+'_eq', frequency=fr.frequency, raw=fr.raw)
-            fr_eq.center()
-            fr_eq.compensate(
-                FrequencyResponse(name='zero', frequency=fr.frequency, raw=np.zeros(len(fr.frequency))),
-                min_mean_error=False
-            )
-            fr_eq.smoothen(
-                window_size=1 / 3,
-                iterations=1,
-                treble_window_size=1 / 6,
-                treble_iterations=1,
-                treble_f_lower=100,
-                treble_f_upper=1000,
-
-            )
-            fr_eq.equalize(max_gain=20, treble_f_lower=20000, treble_f_upper=22000)
-
-            fr.equalization = fr_eq.equalization.copy()
-            fr.equalized_raw = fr.raw + fr.equalization
-            avg = np.mean(fr.equalized_raw[np.logical_and(fr.frequency >= 100, fr.frequency <= 10000)])
-            if name == 'Left':
-                left_avg = avg
-            else:
-                fr.equalization += left_avg - avg
-                fr.equalized_raw += left_avg - avg
-
-            eq_ir = fr.minimum_phase_impulse_response(fs=fs, f_res=2)
-            for j in range(impulse_responses.shape[0]):
-                if (name == 'Left' and j % 2) or (name == 'Right' and not j % 2):
-                    continue
-                # FIXME: This produces silence
-                impulse_responses[j, :] = convolve(impulse_responses[j, :], eq_ir, mode='same')
-
-            fr.plot_graph(show=False, file_path=os.path.join(out_dir, 'Headphones {}.png'.format(name)), a_min=-40, a_max=20)
-
-    # Write standard channel order HRIR
-    write_wav(os.path.join(out_dir, 'hrir.wav'), fs, impulse_responses)
-
-    # Write HeSuVi channel order HRIR
-    hesuvi_order = ['FL-left', 'FL-right', 'SL-left', 'SL-right', 'BL-left', 'BL-right', 'FC-left', 'FR-right',
-                    'FR-left', 'SR-right', 'SR-left', 'BR-right', 'BR-left', 'FC-right']
-    indices = [IR_ORDER.index(ch) for ch in hesuvi_order]
-    write_wav(os.path.join(out_dir, 'hesuvi.wav'), fs, impulse_responses[indices, :])
+    # Sync axes
+    ir_ylim = [0.0, 0.0]
+    fr_ylim = [0.0, 0.0]
+    for ch, obj in plots.items():
+        if not obj['ir'].lines or not obj['fr'].lines:
+            continue
+        if obj['ir'].get_ylim()[0] < ir_ylim[0]:
+            ir_ylim[0] = obj['ir'].get_ylim()[0]
+        if obj['ir'].get_ylim()[1] > ir_ylim[1]:
+            ir_ylim[1] = obj['ir'].get_ylim()[1]
+        if obj['fr'].get_ylim()[0] < fr_ylim[0]:
+            fr_ylim[0] = obj['fr'].get_ylim()[0]
+        if obj['fr'].get_ylim()[1] > fr_ylim[1]:
+            fr_ylim[1] = obj['fr'].get_ylim()[1]
+    for ch, obj in plots.items():
+        obj['ir'].set_ylim(ir_ylim)
+        obj['fr'].set_ylim(fr_ylim)
 
     # Save plots
     for ch, obj in plots.items():
@@ -732,6 +680,162 @@ def main(measure=False,
             im = Image.open(file_path)
             im = im.convert('P', palette=Image.ADAPTIVE, colors=60)
             im.save(file_path, optimize=True)
+    plt.close('all')
+
+    if compensate_headphones:
+        # Read WAV file
+        fs_hp, hp_rec = read_wav(headphones)
+        # Headphones are measured one side at a time in a single sequence, split recording into tracks
+        hp_rec = split_recording(hp_rec, test_signal, ['FL', 'FR'], fs_hp, silence_length)
+        # Select 1st and 4th tracks which are left speaker - left microphone and right speaker - right microphone
+        hp_rec = hp_rec[[0, 3], :]
+        compensated = []
+        eq_irs = []
+        biases = []
+        frs = []
+
+        for i in range(hp_rec.shape[0]):
+            # Select track
+            track = hp_rec[i, :]
+            # Estimate impulse response
+            impulse_response = estimator.estimate(track)
+            # Calculate magnitude response
+            f, m = magnitude_response(impulse_response, fs_hp)
+            # Create frequency response
+            name = 'Left' if i == 0 else 'Right'
+            fr = FrequencyResponse(name=name, frequency=f[1:], raw=m[1:])
+            fr.interpolate()
+            # Take copy
+            fr_eq = FrequencyResponse(name='{}_eq'.format(name), frequency=fr.frequency.copy(), raw=fr.raw.copy())
+            # Centering removes bias and we want the bias to stay in the original
+            fr_eq.center()
+            # Aiming for flat response at the ear canal
+            fr_eq.compensate(
+                FrequencyResponse(name='zero', frequency=fr.frequency, raw=np.zeros(len(fr.frequency))),
+                min_mean_error=False
+            )
+            # Smoothen
+            fr_eq.smoothen(
+                window_size=1 / 6,
+                iterations=1,
+                treble_f_lower=2000,
+                treble_f_upper=5000,
+                treble_window_size=1 / 3,
+                treble_iterations=1000
+            )
+            heavy = fr_eq.smoothed.copy()
+            heavy_error = fr_eq.error_smoothed.copy()
+            fr_eq.smoothen(
+                window_size=1 / 6,
+                iterations=1,
+                treble_f_lower=2000,
+                treble_f_upper=5000,
+                treble_window_size=1 / 3,
+                treble_iterations=1
+            )
+            light = fr_eq.smoothed.copy()
+            light_error = fr_eq.error_smoothed.copy()
+            combination = np.max(np.vstack([light, heavy]), axis=0)
+            combination_error = np.max(np.vstack([light_error, heavy_error]), axis=0)
+            sm = FrequencyResponse(name='', frequency=fr_eq.frequency.copy(), raw=combination, error=combination_error)
+            sm.smoothen(
+                window_size=1 / 6,
+                iterations=10,
+                treble_window_size=1 / 6,
+                treble_iterations=10
+            )
+            fr_eq.smoothed = sm.smoothed.copy()
+            fr_eq.error_smoothed = sm.error_smoothed.copy()
+            # Equalize to flat
+            fr_eq.equalize(max_gain=15, treble_f_lower=5000, treble_f_upper=20000, treble_gain_k=1)
+            # Copy equalization curve
+            fr.equalization = fr_eq.equalization.copy()
+            # Calculate equalized raw data
+            fr.equalized_raw = fr.raw + fr.equalization
+            frs.append(fr)
+            # Create miniumum phase FIR filter
+            eq_ir = fr.minimum_phase_impulse_response(fs=fs, f_res=10)
+            eq_irs.append(eq_ir)
+            # Calculate bias
+            avg = np.mean(fr.equalized_raw[np.logical_and(fr.frequency >= 100, fr.frequency <= 10000)])
+            biases.append(avg)
+
+        # Balance equalization filters for left and right ear
+        # Both ears need to have same level
+        # Levels might be different due to measurement devices or microphone placement
+        if biases[0] > biases[1]:
+            # Left headphone measurement is louder, bring it down to level of right headphone
+            eq_irs[0] *= 10**((biases[1]-biases[0]) / 20)
+            frs[0].equalization -= biases[0] - biases[1]
+        else:
+            # Right headphone measurement is louder, bring it down to level of left headphone
+            eq_irs[1] *= 10**((biases[0] - biases[1]) / 20)
+            frs[1].equalization -= biases[1] - biases[0]
+
+        fig_l, ax_l = plt.subplots(1, 2)
+        fig_l.set_size_inches(15, 7)
+        plt.suptitle('Headphones Left')
+        fig_r, ax_r = plt.subplots(1, 2)
+        fig_r.set_size_inches(15, 7)
+        plt.suptitle('Headphones Right')
+
+        # Create FIR filter waveform plots
+        for i, eq_ir in enumerate(eq_irs):
+            fig = fig_l if i == 0 else fig_r
+            ax = ax_l if i == 0 else ax_r
+            plot_ir(eq_ir, fs, fig=fig, ax=ax[1], max_time=0.01)
+
+        # Create headphone equalization graphs
+        for i, fr in enumerate(frs):
+            fr.equalized_raw = fr.raw + fr.equalization
+            ax = ax_l if i == 0 else ax_r
+            ax = ax[0]
+            ax.plot(fr.frequency, fr.raw, color='black')
+            ax.plot(fr.frequency, fr.equalization, color='darkgreen')
+            ax.plot(fr.frequency, fr.equalized_raw, color='magenta')
+            ax.set_xlabel('Frequency (Hz)')
+            ax.semilogx()
+            ax.set_xlim([20, 20e3])
+            ax.set_ylim([-40, 20])
+            ax.set_ylabel('Amplitude (dBr)')
+            ax.set_title(fr.name)
+            ax.grid(True, which='major')
+            ax.grid(True, which='minor')
+            ax.xaxis.set_major_formatter(ticker.StrMethodFormatter('{x:.0f}'))
+            ax.legend(['Raw', 'Equalization', 'Equalized Raw'], fontsize=8)
+
+        # Sync FIR filter axes
+        y_lim = [
+            np.min([ax_l[1].get_ylim()[0], ax_r[1].get_ylim()[0]]),
+            np.max([ax_l[1].get_ylim()[1], ax_r[1].get_ylim()[1]])
+        ]
+        ax_l[1].set_ylim(y_lim)
+        ax_r[1].set_ylim(y_lim)
+
+        # Save headphone plots
+        fig_l.savefig(os.path.join(out_dir, 'Headphones Left.png'))
+        plt.close(fig_l)
+        fig_r.savefig(os.path.join(out_dir, 'Headphones Right.png'))
+        plt.close(fig_r)
+
+        for j in range(impulse_responses.shape[0]):
+            # Equalize all left ear impulse responses with left ear headphone FIR filter and right ear impulse
+            # responses with right ear headphone FIR filter
+            filtered = convolve(impulse_responses[j, :], eq_irs[j % 2], mode='full')
+            compensated.append(filtered)
+
+        # Stack compensated impulse responses
+        if len(compensated):
+            impulse_responses = np.vstack(compensated)
+
+    # Write standard channel order HRIR
+    write_wav(os.path.join(out_dir, 'hrir.wav'), fs, impulse_responses)
+
+    # Write HeSuVi channel order HRIR
+    hesuvi_order = ['FL-left', 'FL-right', 'SL-left', 'SL-right', 'BL-left', 'BL-right', 'FC-left', 'FR-right',
+                    'FR-left', 'SR-right', 'SR-left', 'BR-right', 'BR-left', 'FC-right']
+    indices = [IR_ORDER.index(ch) for ch in hesuvi_order]
+    write_wav(os.path.join(out_dir, 'hesuvi.wav'), fs, impulse_responses[indices, :])
 
 
 def create_cli():

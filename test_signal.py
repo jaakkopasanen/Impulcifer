@@ -8,8 +8,6 @@ import matplotlib.pyplot as plt
 
 
 def main():
-    smoothing = 'none'
-
     if False:
         fs, data = read_wav('data/Sweep-48000-16-M-5.0s-fade.wav')
         data = data[0, :]
@@ -19,7 +17,7 @@ def main():
     else:
         fs = 48000
         duration = 5
-        f_min = 20
+        f_min = 10
         ire = ImpulseResponseEstimator(duration, low=f_min, fs=fs)
         data = ire.test_signal.copy()
         write_wav(
