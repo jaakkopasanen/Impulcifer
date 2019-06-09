@@ -90,6 +90,7 @@ Usage instructions and command line arguments go here...
   - Pre-ringing cancellation
 - Tracking filter
 - Channel delay syncing
+  - Channel delay calculation (equal distance to point between ears)
 - Reverberation time adjustment
 - Early reflection management
 - Room correction

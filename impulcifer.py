@@ -7,7 +7,7 @@ import matplotlib.ticker as ticker
 from pydub import AudioSegment
 import argparse
 from scipy import signal
-from scipy.signal import fftconvolve, kaiser, convolve
+from scipy.signal import fftconvolve, kaiser, hanning, convolve
 import pyfftw
 from time import time
 from PIL import Image
@@ -28,13 +28,12 @@ for _ch in SPEAKER_NAMES:
 # Distance from side left speaker (SL) to left ear is smaller than distance from front left (FL) to left ear
 # Two samples (@48kHz) added to each for head room
 # These are used for synchronizing impulse responses
-# TODO: Remove the two samples from these delays and add the headroom in the code
 SPEAKER_DELAYS = {
     'FL': 0.107,
     'FR': 0.107,
     'FC': 0.214,
-    'BL': 0.107,  # TODO: Confirm this
-    'BR': 0.107,  # TODO: Confirm this
+    'BL': 0.107,
+    'BR': 0.107,
     'SL': 0.0,
     'SR': 0.0,
 }
@@ -183,7 +182,7 @@ def impulse_response_decay(impulse_response, fs, window_size_ms=1, fig=None, ax=
         if plot_file_path:
             fig.savefig(plot_file_path)
         if show_plot:
-            fig.show()
+            plt.show(fig)
 
     return smoothed
 
@@ -259,8 +258,7 @@ def crop_ir_head(left, right, speaker, fs, head_ms=1):
         right = right[peak_right-delay:]
 
     # Make sure impulse response starts from silence
-    # TODO: This should by Kaiser (or other window function) and have more samples
-    window = kaiser(head*2, 16)[:head]
+    window = hanning(head*2)[:head]
     left[:head] *= window
     right[:head] *= window
     # left[0] *= 0.0
@@ -285,65 +283,6 @@ def zero_pad(data, max_samples):
     silence = np.zeros((data.shape[0], padding_length), dtype=data.dtype)
     zero_padded = np.concatenate([data, silence], axis=1)
     return zero_padded
-
-
-def deconv(recording, test_signal, method='inverse_filter', fs=None):
-    """Calculates deconvolution in frequency or time domain.
-
-    Args:
-        recording: Recording as numpy array
-        test_signal: Test signal as numpy array
-        method: "inverse_filter" or "fft"
-        fs: Sampling rate, required when method is "inverse_filter"
-
-    Returns:
-        Impulse response
-    """
-    if method == 'fft':
-        # Division in frequency domain is deconvolution in time domain
-        X = np.fft.fft(test_signal)
-        Y = np.fft.fft(recording)
-        H = Y / X
-        h = np.fft.ifft(H)
-        h = np.real(h)
-
-    elif method == 'inverse_filter':
-        if fs is None:
-            raise TypeError('Sampling rate is required for inverse filter deconvolution.')
-        t = time()
-        test_signal = np.squeeze(test_signal)
-        # TODO: Use ImpulseResponseEstimator to avoid building inverse filter for every track
-
-        # FIXME: low and high should be given as parameters, it's not possible to infer them from test signal
-        low = 20
-        high = 20000
-        w1 = low / fs * 2*np.pi  # Sweep start frequency in radians relative to sampling frequency
-        w2 = high / fs * 2*np.pi  # Sweep end frequency in radians relative to sampling frequency
-
-        # This is what the value of K will be at the end (in dB):
-        k_end = 10 ** ((-6 * np.log2(w2 / w1)) / 20)
-        # dB to rational number.
-        k = np.log(k_end) / len(test_signal)
-
-        # Making inverse of test signal so that convolution will just calculate a dot product
-        # Weighting it with exponent to achieve 6 dB per octave amplitude decrease.
-        c = np.array(list(map(lambda t: np.exp(float(t) * k), range(len(test_signal)))))
-        inv_filter = np.flip(test_signal) * c
-
-        # Now we have to normalize energy of result of dot product.
-        # This is "naive" method but it just works.
-        frp = pyfftw.empty_aligned(len(test_signal)*2-1, dtype='complex128')
-        frp[:] = fftconvolve(inv_filter, test_signal)
-        frp = pyfftw.interfaces.scipy_fftpack.fft(frp)
-        inv_filter /= np.abs(frp[round(frp.shape[0] / 4)])
-
-        # Deconvolution between recording and inverse filter
-        h = fftconvolve(recording, inv_filter, mode='full')
-        h = np.concatenate([h, [0.0]])
-        h = h[len(test_signal):len(test_signal) * 2 + 1]
-    else:
-        raise ValueError('"{}" is not one of the supported "domain" parameter values "time" or "frequency".')
-    return h
 
 
 def read_wav(file_path):
@@ -429,7 +368,7 @@ def spectrogram(sweep, fs, fig=None, ax=None, show_plot=False, plot_file_path=No
 
     if fig is None:
         fig, ax = plt.subplots()
-    plt.specgram(sweep, Fs=fs)
+    ax.specgram(sweep, Fs=fs)
     ax.set_xlabel('Time (s)')
     ax.set_ylabel('Frequency (Hz)')
     ax.set_title('Spectrogram')
@@ -437,7 +376,7 @@ def spectrogram(sweep, fs, fig=None, ax=None, show_plot=False, plot_file_path=No
     if plot_file_path:
         fig.savefig(plot_file_path)
     if show_plot:
-        fig.show()
+        plt.show(fig)
 
 
 def plot_ir(ir, fs, fig=None, ax=None, max_time=None, show_plot=False, plot_file_path=None):
@@ -530,13 +469,13 @@ def main(measure=False,
     # Normalize to -0.1 dB
     recording = normalize(recording, target_db=-0.1)
 
-    # for i in range(recording.shape[0]):
-    #     spectrogram(
-    #         recording[i, :],
-    #         fs,
-    #         fig=plots[IR_ORDER[i]]['figure'],
-    #         ax=plots[IR_ORDER[i]]['spectrogram']
-    #     )
+    for i in range(recording.shape[0]):
+        spectrogram(
+            recording[i, :],
+            fs,
+            fig=plots[IR_ORDER[i]]['figure'],
+            ax=plots[IR_ORDER[i]]['spectrogram']
+        )
 
     # Write multi-channel WAV file with sine sweeps for debugging
     write_wav(os.path.join(out_dir, 'preprocessed.wav'), fs, recording)
@@ -632,7 +571,7 @@ def main(measure=False,
             f, m = magnitude_response(ir, fs)
             fr = FrequencyResponse(name='Frequency response', frequency=f[1:], raw=m[1:])
             fr.interpolate()
-            fr.smoothen(
+            fr.smoothen_fractional_octave(
                 window_size=1 / 3,
                 iterations=1,
                 treble_window_size=1 / 6,
@@ -715,37 +654,7 @@ def main(measure=False,
                 min_mean_error=False
             )
             # Smoothen
-            fr_eq.smoothen(
-                window_size=1 / 6,
-                iterations=1,
-                treble_f_lower=2000,
-                treble_f_upper=5000,
-                treble_window_size=1 / 3,
-                treble_iterations=1000
-            )
-            heavy = fr_eq.smoothed.copy()
-            heavy_error = fr_eq.error_smoothed.copy()
-            fr_eq.smoothen(
-                window_size=1 / 6,
-                iterations=1,
-                treble_f_lower=2000,
-                treble_f_upper=5000,
-                treble_window_size=1 / 3,
-                treble_iterations=1
-            )
-            light = fr_eq.smoothed.copy()
-            light_error = fr_eq.error_smoothed.copy()
-            combination = np.max(np.vstack([light, heavy]), axis=0)
-            combination_error = np.max(np.vstack([light_error, heavy_error]), axis=0)
-            sm = FrequencyResponse(name='', frequency=fr_eq.frequency.copy(), raw=combination, error=combination_error)
-            sm.smoothen(
-                window_size=1 / 6,
-                iterations=10,
-                treble_window_size=1 / 6,
-                treble_iterations=10
-            )
-            fr_eq.smoothed = sm.smoothed.copy()
-            fr_eq.error_smoothed = sm.error_smoothed.copy()
+            fr_eq.smoothen_heavy_light()
             # Equalize to flat
             fr_eq.equalize(max_gain=15, treble_f_lower=5000, treble_f_upper=20000, treble_gain_k=1)
             # Copy equalization curve
@@ -855,7 +764,6 @@ def create_cli():
                             help='Length of silence in the beginning, end and between recordings.')
     arg_parser.add_argument('--headphones', type=str,
                             help='File path to headphones sine sweep recording. Stereo WAV file is expected.')
-    # TODO: filtfilt
     args = vars(arg_parser.parse_args())
     if 'speakers' in args and args['speakers'] is not None:
         args['speakers'] = args['speakers'].upper().split(',')
