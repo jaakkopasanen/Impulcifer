@@ -4,12 +4,10 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
-from pydub import AudioSegment
 import argparse
 from scipy import signal
-from scipy.signal import fftconvolve, kaiser, hanning, convolve
-import pyfftw
-from time import time
+from scipy.signal import kaiser, hanning, convolve
+import soundfile as sf
 from PIL import Image
 from impulse_response_estimator import ImpulseResponseEstimator
 from autoeq.frequency_response import FrequencyResponse
@@ -295,31 +293,27 @@ def read_wav(file_path):
         - sampling frequency as integer
         - wav data as numpy array with one row per track, samples in range -1..1
     """
-    # Using AudioSegment because SciPy can't read 24-bit WAVs
-    seg = AudioSegment.from_wav(file_path)
-    data = []
-    for track in seg.split_to_mono():
-        # Read samples of each track separately
-        data.append(track.get_array_of_samples())
-    # Create numpy array where tracks are on rows and samples have been scaled in range -1..1
-    data = to_float(np.vstack(data))
-    return seg.frame_rate, data
+    data, fs = sf.read(file_path)
+    if len(data.shape) > 1:
+        # Soundfile has tracks on columns, we want them on rows
+        data = np.transpose(data)
+    return fs, data
 
 
-def write_wav(file_path, fs, data):
+def write_wav(file_path, fs, data, bit_depth=32):
     """Writes WAV file."""
-    tracks = []
-    if len(data.shape) == 1:
-        data = np.expand_dims(data, 0)
-    for i in range(data.shape[0]):
-        tracks.append(AudioSegment(
-            np.multiply(data[i, :], 2 ** 31).astype('int32').tobytes(),
-            frame_rate=fs,
-            sample_width=4,
-            channels=1
-        ))
-    seg = AudioSegment.from_mono_audiosegments(*tracks)
-    seg.export(file_path, format='wav')
+    if bit_depth == 16:
+        subtype = "PCM_16"
+    elif bit_depth == 24:
+        subtype = "PCM_24"
+    elif bit_depth == 32:
+        subtype = "PCM_32"
+    else:
+        raise ValueError('Invalid bit depth. Accepted values are 16, 24 and 32.')
+    if len(data.shape) > 1 and data.shape[1] > data.shape[0]:
+        # We have tracks on rows, soundfile want's them on columns
+        data = np.transpose(data)
+    sf.write(file_path, data, samplerate=fs, subtype=subtype)
 
 
 def reorder_tracks(tracks, speakers):

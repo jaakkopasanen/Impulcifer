@@ -1,5 +1,5 @@
 matplotlib
 scipy
-pydub
 pyfftw
+soundfile
 git+https://github.com/jaakkopasanen/autoeq-pkg
