@@ -39,26 +39,28 @@ class ImpulseResponseEstimator(object):
         # Generate inverse filter
         self.inverse_filter = self.generate_inverse_filter()
 
+        #self.plot()
+
+    def __len__(self):
+        return len(self.test_signal)
+
+    def plot(self):
         f, m = magnitude_response(self.test_signal, self.fs)
         plt.plot(f, m)
         f, m = magnitude_response(self.inverse_filter, self.fs)
         plt.plot(f, m)
+        f, m = magnitude_response(self.estimate(self.test_signal), self.fs)
+        plt.plot(f, m)
         plt.semilogx()
-        plt.legend(['Test signal spectrum', 'Inverse filter spectrum'])
+        plt.legend(['Test signal spectrum', 'Inverse filter spectrum', 'Impulse response spectrum'])
         plt.grid(True, which='major')
         plt.grid(True, which='minor')
         plt.show()
 
-        f, m = magnitude_response(self.estimate(self.test_signal), self.fs)
-        plt.plot(f, m)
-        plt.semilogx()
+        plt.plot(np.arange(len(self)) / self.fs, self.estimate(self.test_signal))
+        plt.title('Impulse response')
+        plt.grid(True)
         plt.show()
-
-        plt.plot(self.estimate(self.test_signal))
-        plt.show()
-
-    def __len__(self):
-        return len(self.test_signal)
 
     def generate_inverse_filter(self):
         """Generates inverse filter for test signal.
@@ -69,16 +71,6 @@ class ImpulseResponseEstimator(object):
         P = self.n_octaves
         N = len(self.test_signal)
         inverse_filter = np.flip(self.test_signal) * (2**(P / N))**(np.arange(N)*-1) * P * np.log(2) / (1 - 2**-P)
-
-        # This is what the value of K will be at the end (in dB):
-        kend = 10**((-6*np.log2(self.w2/self.w1))/20)
-        # dB to rational number.
-        k = np.log(kend) / len(self.test_signal)
-
-        # Making reverse probe impulse so that convolution will just calculate dot product.
-        # Weighting it with exponent to achieve 6 dB per octave amplitude decrease.
-        c = np.array(list(map(lambda t: np.exp(float(t)*k), range(len(self.test_signal)))))
-        inverse_filter = np.flip(self.test_signal) * c
 
         # Now we have to normalize energy of result of dot product.
         # This is "naive" method but it just works.
@@ -155,9 +147,7 @@ class ImpulseResponseEstimator(object):
 
     def estimate(self, recording):
         """Estimates impulse response"""
-        ir = fftconvolve(recording, self.inverse_filter, mode='full')
-        ir = ir[self.test_signal.shape[0]:self.test_signal.shape[0]*2+1]
-        return ir
+        return fftconvolve(recording, self.inverse_filter, mode='same')
 
     @classmethod
     def from_wav(cls, file_path):
