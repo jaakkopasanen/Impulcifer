@@ -5,7 +5,8 @@ from argparse import ArgumentParser
 from scipy.fftpack import fft
 from scipy.signal import fftconvolve, kaiser, hanning
 import numpy as np
-import impulcifer
+import matplotlib.pyplot as plt
+from utils import read_wav, write_wav, magnitude_response
 
 
 class ImpulseResponseEstimator(object):
@@ -15,37 +16,78 @@ class ImpulseResponseEstimator(object):
     Angelo Farina
     """
 
-    def __init__(self, duration=5.0, fs=44100):
+    def __init__(self, min_duration=5.0, fs=44100):
         if fs != int(fs):
             raise ValueError('Sampling rate "fs" must be an integer.')
         self.fs = int(fs)
-        self.low = 5.0  # Start frequency
-        self.high = self.fs / 2  # End frequency is always Nyquist frequency
+        # End frequency is always Nyquist frequency
+        self.high = self.fs / 2
+        # Start frequency is less than 5 Hz but scaled in a way that there is integer number of octaves between
+        # start and end frequencies
+        self.low = 5
+        self.n_octaves = np.ceil(np.log2(self.high / self.low))  # P
+        self.low = self.high / 2**self.n_octaves
 
         # Total length in samples
-        self.T = fs*duration
-        self.w1 = self.low / self.fs * 2*np.pi
-        self.w2 = self.high / self.fs * 2*np.pi
+        self.w1 = self.low / self.fs * 2 * np.pi
+        self.w2 = self.high / self.fs * 2 * np.pi
 
         # Generate test signal
-        self.test_signal = self.generate_test_signal()
+        self.test_signal = self.generate_test_signal(min_duration)
+        self.duration = len(self.test_signal) / self.fs
+
+        # Generate inverse filter
+        self.inverse_filter = self.generate_inverse_filter()
+
+        f, m = magnitude_response(self.test_signal, self.fs)
+        plt.plot(f, m)
+        f, m = magnitude_response(self.inverse_filter, self.fs)
+        plt.plot(f, m)
+        plt.semilogx()
+        plt.legend(['Test signal spectrum', 'Inverse filter spectrum'])
+        plt.grid(True, which='major')
+        plt.grid(True, which='minor')
+        plt.show()
+
+        f, m = magnitude_response(self.estimate(self.test_signal), self.fs)
+        plt.plot(f, m)
+        plt.semilogx()
+        plt.show()
+
+        plt.plot(self.estimate(self.test_signal))
+        plt.show()
+
+    def __len__(self):
+        return len(self.test_signal)
+
+    def generate_inverse_filter(self):
+        """Generates inverse filter for test signal.
+
+        Returns:
+
+        """
+        P = self.n_octaves
+        N = len(self.test_signal)
+        inverse_filter = np.flip(self.test_signal) * (2**(P / N))**(np.arange(N)*-1) * P * np.log(2) / (1 - 2**-P)
 
         # This is what the value of K will be at the end (in dB):
         kend = 10**((-6*np.log2(self.w2/self.w1))/20)
         # dB to rational number.
-        k = np.log(kend)/self.T
+        k = np.log(kend) / len(self.test_signal)
 
         # Making reverse probe impulse so that convolution will just calculate dot product.
         # Weighting it with exponent to achieve 6 dB per octave amplitude decrease.
-        c = np.array(list(map(lambda t: np.exp(float(t)*k), range(int(self.T)))))
-        self.inverse_filter = np.flip(self.test_signal) * c
+        c = np.array(list(map(lambda t: np.exp(float(t)*k), range(len(self.test_signal)))))
+        inverse_filter = np.flip(self.test_signal) * c
 
         # Now we have to normalize energy of result of dot product.
         # This is "naive" method but it just works.
-        frp = fft(fftconvolve(self.inverse_filter, self.test_signal))
-        self.inverse_filter /= np.abs(frp[round(frp.shape[0]/4)])
+        frp = fft(fftconvolve(inverse_filter, self.test_signal))
+        inverse_filter /= np.abs(frp[round(frp.shape[0]/4)])
 
-    def generate_test_signal(self):
+        return inverse_filter
+
+    def generate_test_signal(self, min_duration, fade_in=1/2, fade_out=None):
         """Generates test signal.
 
         Simultaneous Measurement of Impulse Response and Distortion with a Swept-Sine Technique.
@@ -60,45 +102,56 @@ class ImpulseResponseEstimator(object):
         Massimo Garai and Paolo Guidorzi, 2015
         https://www.researchgate.net/publication/280131468_Optimizing_the_exponential_sine_sweep_ESS_signal_for_in_situ_measurements_on_noise_barriers
 
+        Args:
+            min_duration: Minimum test signal duration in seconds.
+            fade_in: Size of fade-in Hanning window in octaves. None value disables fade-in.
+            fade_out: Size of fade-out Hanning window in octaves. None value disables fade-out.
+
         Returns:
             Test signal
         """
-        # TODO: Phase synced sine sweep as described in Garai and Guidorzi
-        w1 = self.w1
-        w2 = self.w2
-        T = self.T
+        # P is the number of octaves in the test signal
+        P = self.n_octaves
+        # M is a length multiplier
+        # See equation 2 in Garai and Guidorzi 2015
+        # Here it's selected such that the test signal duration is equal or greater than minimum duration
+        M = np.ceil(min_duration * self.fs * (np.pi / 2**P) / (np.pi * 2 * np.log(2**P)))
+        # L is the real number length of the test signal in samples
+        L = M * np.pi * 2 * np.log(2**P) / (np.pi / 2**P)
+        # N is the actual length of the test signal in samples
+        N = np.round(L)
+        freqs = np.pi / 2**P * L / np.log(2**P) * np.exp(np.arange(N) / N * np.log(2**P))
+        test_signal = np.sin(freqs)
 
-        def log_freq(t):
-            K = T * w1 / np.log(w2/w1)
-            L = T / np.log(w2/w1)
-            return K * (np.exp(t/L)-1.0)
-
-        freqs = log_freq(range(int(T)))
-        impulse = np.sin(freqs)
-
-        def seconds_per_octave(octaves):
-            return octaves / (np.log2(self.high / self.low) / (self.T / self.fs))
+        seconds_per_octave = N / self.fs / P
 
         # Fade-in window
-        fade_in_window_len = 2 * int(self.fs * seconds_per_octave(1/2))
-        if fade_in_window_len % 2:
-            fade_in_window_len += 1
-        fade_in_window = hanning(fade_in_window_len)[:fade_in_window_len // 2]
+        if fade_in is None:
+            fade_in_window = []
+        else:
+            fade_in = 2 * int(self.fs * seconds_per_octave * fade_in)
+            if fade_in % 2:
+                fade_in += 1
+            fade_in_window = hanning(fade_in)[:fade_in // 2]
 
         # Fade-out window
-        fade_out_window_len = 2 * int(self.fs * seconds_per_octave(1/24))
-        if fade_out_window_len % 2:
-            fade_out_window_len += 1
-        fade_out_window = hanning(fade_out_window_len)[fade_out_window_len // 2:]
+        if fade_out is None:
+            fade_out_window = []
+        else:
+            fade_out = 2 * int(self.fs * seconds_per_octave * fade_out)
+            if fade_out % 2:
+                fade_out += 1
+            fade_out_window = hanning(fade_out)[fade_out // 2:]
 
         # Create window from fade-in window and fade-out window with ones in the middle
         win = np.concatenate([
             fade_in_window,
-            np.ones(len(impulse) - len(fade_in_window) - len(fade_out_window)),
+            np.ones(len(test_signal) - len(fade_in_window) - len(fade_out_window)),
             fade_out_window
         ])
-        impulse *= win
-        return impulse
+        test_signal *= win
+
+        return test_signal
 
     def estimate(self, recording):
         """Estimates impulse response"""
@@ -109,9 +162,10 @@ class ImpulseResponseEstimator(object):
     @classmethod
     def from_wav(cls, file_path):
         """Creates ImpulseResponseEstimator instance from test signal WAV."""
-        fs, data = impulcifer.read_wav(file_path)
+        fs, data = read_wav(file_path)
         ire = cls(duration=len(data) / fs, fs=fs)
-        if np.max(ire.test_signal, data) > 1e-9:
+        print(np.max(ire.test_signal - data))
+        if np.max(ire.test_signal - data) > 1e-9:
             raise ValueError('Data read from WAV file does not match generated test signal. WAV file must be generated '
                              'with the current version of ImpulseResponseEstimator.')
         return ire
@@ -182,23 +236,24 @@ def main():
     speaker_indices = [standard_order.index(ch) for ch in speakers]
 
     # Create instance
-    ire = ImpulseResponseEstimator(duration=duration, fs=fs)
+    ire = ImpulseResponseEstimator(min_duration=duration, fs=fs)
 
     # Create file path with directory and default file name
-    file_path = os.path.join(dir_path, 'sweep-{t}s-{fs:d}Hz-{bits:d}bit-{low}Hz-{high:.1f}Hz.wav'.format(
-        fs=fs, t=duration, bits=bit_depth, low=ire.low, high=ire.high
-    ))
+    file_name = 'sweep-{t:.2f}s-{fs:d}Hz-{bits:d}bit-{low:.2f}Hz-{high:d}Hz.wav'.format(
+        fs=fs, t=ire.duration, bits=bit_depth, low=ire.low, high=int(ire.high)
+    )
+    file_path = os.path.join(dir_path, file_name)
     speaker_seq = ','.join(speakers)
-    seq_file_path = file_path.replace('sweep-', 'sweep-seg-{}-{}-'.format(speaker_seq, tracks))
+    seq_file_path = os.path.join(dir_path, file_name.replace('sweep-', 'sweep-seg-{}-{}-'.format(speaker_seq, tracks)))
 
     # Write test signal to WAV file
-    impulcifer.write_wav(file_path, ire.fs, ire.test_signal, bit_depth=bit_depth)
+    write_wav(file_path, ire.fs, ire.test_signal, bit_depth=bit_depth)
 
     # Create test signal sequence
-    data = np.zeros((n_tracks, int((ire.fs * 2.0 + ire.T) * len(speakers) + ire.fs * 2.0)))
+    data = np.zeros((n_tracks, int((ire.fs * 2.0 + len(ire)) * len(speakers) + ire.fs * 2.0)))
     for i, speaker in enumerate(speakers):
-        start_zeros = int((ire.fs * 2.0 + ire.T) * i + ire.fs * 2.0)
-        end_zeros = int((ire.fs * 2.0 + ire.T) * (len(speakers) - i - 1) + ire.fs * 2.0)
+        start_zeros = int((ire.fs * 2.0 + len(ire)) * i + ire.fs * 2.0)
+        end_zeros = int((ire.fs * 2.0 + len(ire)) * (len(speakers) - i - 1) + ire.fs * 2.0)
         sweep_padded = np.concatenate([
             np.zeros((start_zeros,)),
             ire.test_signal,
@@ -208,7 +263,7 @@ def main():
     data = np.vstack(data)
 
     # Write test signal sequence
-    impulcifer.write_wav(seq_file_path, ire.fs, data, bit_depth=bit_depth)
+    write_wav(seq_file_path, ire.fs, data, bit_depth=bit_depth)
 
 
 if __name__ == '__main__':

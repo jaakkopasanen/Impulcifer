@@ -7,10 +7,10 @@ import matplotlib.ticker as ticker
 import argparse
 from scipy import signal
 from scipy.signal import kaiser, hanning, convolve
-import soundfile as sf
 from PIL import Image
-from impulse_response_estimator import ImpulseResponseEstimator
 from autoeq.frequency_response import FrequencyResponse
+from impulse_response_estimator import ImpulseResponseEstimator
+from utils import read_wav, write_wav, magnitude_response
 
 # https://en.wikipedia.org/wiki/Surround_sound
 SPEAKER_NAMES = ['FL', 'FR', 'FC', 'BL', 'BR', 'SL', 'SR']
@@ -35,25 +35,6 @@ SPEAKER_DELAYS = {
     'SL': 0.0,
     'SR': 0.0,
 }
-
-
-def magnitude_response(x, fs):
-    """Calculates frequency magnitude response
-
-    Args:
-        x: Audio data
-        fs: Sampling rate
-
-    Returns:
-        - **f:** Frequencies
-        - **X:** Magnitudes
-    """
-    nfft = len(x)
-    df = fs / nfft
-    f = np.arange(0, fs - df, df)
-    X = np.fft.fft(x)
-    X_mag = 20 * np.log10(np.abs(X))
-    return f[0:int(np.ceil(nfft/2))], X_mag[0:int(np.ceil(nfft/2))]
 
 
 def to_float(x):
@@ -107,8 +88,8 @@ def split_recording(recording, test_signal, speakers, fs, silence_length):
     4. Front right speaker - right ear
 
     Args:
-        recording: AudioSegment for the sine sweep recording
-        test_signal: AudioSegment for the test signal
+        recording: Numpy array for the sine sweep recording
+        test_signal: Numpy array for the test signal
         speakers: Speaker order as a list of strings
         fs: Sampling rate
         silence_length: Length of silence in the beginning, end and between test signals in seconds
@@ -128,7 +109,7 @@ def split_recording(recording, test_signal, speakers, fs, silence_length):
 
     # Split sections in time to columns
     columns = []
-    column_size = silence_length + test_signal.shape[1]
+    column_size = silence_length + len(test_signal)
     for i in range(n_columns):
         columns.append(recording[:, i*column_size:(i+1)*column_size])
 
@@ -283,39 +264,6 @@ def zero_pad(data, max_samples):
     return zero_padded
 
 
-def read_wav(file_path):
-    """Reads WAV file
-
-    Args:
-        file_path: Path to WAV file as string
-
-    Returns:
-        - sampling frequency as integer
-        - wav data as numpy array with one row per track, samples in range -1..1
-    """
-    data, fs = sf.read(file_path)
-    if len(data.shape) > 1:
-        # Soundfile has tracks on columns, we want them on rows
-        data = np.transpose(data)
-    return fs, data
-
-
-def write_wav(file_path, fs, data, bit_depth=32):
-    """Writes WAV file."""
-    if bit_depth == 16:
-        subtype = "PCM_16"
-    elif bit_depth == 24:
-        subtype = "PCM_24"
-    elif bit_depth == 32:
-        subtype = "PCM_32"
-    else:
-        raise ValueError('Invalid bit depth. Accepted values are 16, 24 and 32.')
-    if len(data.shape) > 1 and data.shape[1] > data.shape[0]:
-        # We have tracks on rows, soundfile want's them on columns
-        data = np.transpose(data)
-    sf.write(file_path, data, samplerate=fs, subtype=subtype)
-
-
 def reorder_tracks(tracks, speakers):
     """Reorders tracks to match standard track order
 
@@ -428,8 +376,8 @@ def main(measure=False,
 
     # Read files
     fs_rec, recording = read_wav(recording)
-    fs_ts, test_signal = read_wav(test_signal)
-    if fs_rec != fs_ts:
+    estimator = ImpulseResponseEstimator.from_wav(test_signal)
+    if fs_rec != estimator.fs:
         raise ValueError('Sampling rates of recording and test signal do not match.')
     fs = fs_rec
 
@@ -455,7 +403,7 @@ def main(measure=False,
         raise NotImplementedError('Measurement is not yet implemented.')
 
     # Split recording WAV file into individual mono tracks
-    recording = split_recording(recording, test_signal, speakers, fs, silence_length)
+    recording = split_recording(recording, estimator.test_signal, speakers, fs, silence_length)
 
     # Reorder tracks to match standard
     recording = reorder_tracks(recording, speakers)
@@ -475,8 +423,6 @@ def main(measure=False,
     write_wav(os.path.join(out_dir, 'preprocessed.wav'), fs, recording)
 
     # Estimate impulse responses by deconvolution
-    # TODO: duration and low should be parameters
-    estimator = ImpulseResponseEstimator(duration=5, low=10, fs=fs)
     impulse_responses = []
     for i in range(recording.shape[0]):
         track = recording[i, :]
@@ -619,7 +565,7 @@ def main(measure=False,
         # Read WAV file
         fs_hp, hp_rec = read_wav(headphones)
         # Headphones are measured one side at a time in a single sequence, split recording into tracks
-        hp_rec = split_recording(hp_rec, test_signal, ['FL', 'FR'], fs_hp, silence_length)
+        hp_rec = split_recording(hp_rec, estimator.test_signal, ['FL', 'FR'], fs_hp, silence_length)
         # Select 1st and 4th tracks which are left speaker - left microphone and right speaker - right microphone
         hp_rec = hp_rec[[0, 3], :]
         compensated = []
@@ -730,6 +676,15 @@ def main(measure=False,
         # Stack compensated impulse responses
         if len(compensated):
             impulse_responses = np.vstack(compensated)
+
+    # Normalize gain
+    left = np.sum(impulse_responses[[x for x in range(impulse_responses.shape[0]) if not x % 0]], axis=0)
+    right = np.sum(impulse_responses[[x for x in range(impulse_responses.shape[0]) if x % 0]], axis=0)
+    f_l, mr_l = magnitude_response(left, fs)
+    f_r, mr_r = magnitude_response(right, fs)
+    gain = np.max(np.abs(np.vstack(mr_l, mr_r))) * -1
+    print(gain)
+    impulse_responses *= 10**(gain / 20)
 
     # Write standard channel order HRIR
     write_wav(os.path.join(out_dir, 'hrir.wav'), fs, impulse_responses)
