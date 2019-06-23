@@ -11,7 +11,8 @@ from scipy.signal import kaiser, hanning, convolve
 from autoeq.frequency_response import FrequencyResponse
 from impulse_response_estimator import ImpulseResponseEstimator
 from hrir import HRIR
-from utils import read_wav, write_wav, magnitude_response
+from impulse_response import ImpulseResponse
+from utils import read_wav, write_wav, magnitude_response, sync_axes
 from constants import IR_ORDER, SPEAKER_DELAYS
 
 
@@ -365,8 +366,8 @@ def main(measure=False,
     hrir.write_wav(os.path.join(out_dir, 'responses.wav'))
 
     # Plot
-    #hrir.plot(dir_path=out_dir)
-    #plt.show()
+    hrir.plot(dir_path=out_dir)
+    # plt.show()
 
     # Crop noise and harmonics from the beginning
     hrir.crop_heads()
@@ -376,29 +377,23 @@ def main(measure=False,
 
     if compensate_headphones:
         # Read WAV file
-        fs_hp, hp_rec = read_wav(headphones)
-        # Headphones are measured one side at a time in a single sequence, split recording into tracks
-        hp_rec = split_recording(hp_rec, estimator.test_signal, ['FL', 'FR'], fs_hp, silence_length)
-        # Select 1st and 4th tracks which are left speaker - left microphone and right speaker - right microphone
-        hp_rec = hp_rec[[0, 3], :]
-        compensated = []
+        hp_irs = HRIR(estimator)
+        hp_irs.open_recording(headphones, speakers=['FL', 'FR'])
+        hp_irs = [hp_irs.irs['FL']['left'], hp_irs.irs['FR']['right']]
+
         eq_irs = []
         biases = []
         frs = []
-
-        for i in range(hp_rec.shape[0]):
-            # Select track
-            track = hp_rec[i, :]
-            # Estimate impulse response
-            impulse_response = estimator.estimate(track)
+        for i, ir in enumerate(hp_irs):
             # Calculate magnitude response
-            f, m = magnitude_response(impulse_response, fs_hp)
+            f, m = ir.magnitude_response()
             # Create frequency response
             name = 'Left' if i == 0 else 'Right'
             fr = FrequencyResponse(name=name, frequency=f[1:], raw=m[1:])
             fr.interpolate()
-            # Take copy
-            fr_eq = FrequencyResponse(name='{}_eq'.format(name), frequency=fr.frequency.copy(), raw=fr.raw.copy())
+
+            # Take copy of the frequency response and
+            fr_eq = fr.copy()
             # Centering removes bias and we want the bias to stay in the original
             fr_eq.center()
             # Aiming for flat response at the ear canal
@@ -409,15 +404,16 @@ def main(measure=False,
             # Smoothen
             fr_eq.smoothen_heavy_light()
             # Equalize to flat
-            fr_eq.equalize(max_gain=15, treble_f_lower=5000, treble_f_upper=20000, treble_gain_k=1)
+            fr_eq.equalize(max_gain=15, treble_f_lower=4000, treble_f_upper=6000, treble_gain_k=1)
+
             # Copy equalization curve
             fr.equalization = fr_eq.equalization.copy()
             # Calculate equalized raw data
             fr.equalized_raw = fr.raw + fr.equalization
             frs.append(fr)
             # Create miniumum phase FIR filter
-            eq_ir = fr.minimum_phase_impulse_response(fs=fs, f_res=10)
-            eq_irs.append(eq_ir)
+            eq_ir = fr.minimum_phase_impulse_response(fs=estimator.fs, f_res=10)
+            eq_irs.append(ImpulseResponse(eq_ir, estimator.fs))
             # Calculate bias
             avg = np.mean(fr.equalized_raw[np.logical_and(fr.frequency >= 100, fr.frequency <= 10000)])
             biases.append(avg)
@@ -427,68 +423,44 @@ def main(measure=False,
         # Levels might be different due to measurement devices or microphone placement
         if biases[0] > biases[1]:
             # Left headphone measurement is louder, bring it down to level of right headphone
-            eq_irs[0] *= 10**((biases[1]-biases[0]) / 20)
-            frs[0].equalization -= biases[0] - biases[1]
+            eq_irs[0].data *= 10**((biases[1]-biases[0]) / 20)
+            frs[0].equalization += biases[1] - biases[0]
+            frs[0].equalized_raw += biases[1] - biases[0]
         else:
             # Right headphone measurement is louder, bring it down to level of left headphone
-            eq_irs[1] *= 10**((biases[0] - biases[1]) / 20)
-            frs[1].equalization -= biases[1] - biases[0]
+            eq_irs[1].data *= 10**((biases[0] - biases[1]) / 20)
+            frs[1].equalization += biases[0] - biases[1]
+            frs[1].equalized_raw += biases[0] - biases[1]
 
-        fig_l, ax_l = plt.subplots(1, 2)
-        fig_l.set_size_inches(15, 7)
-        plt.suptitle('Headphones Left')
-        fig_r, ax_r = plt.subplots(1, 2)
-        fig_r.set_size_inches(15, 7)
-        plt.suptitle('Headphones Right')
+        # Headphone plots
+        plots = {'left': {'fr': None, 'ir': None}, 'right': {'fr': None, 'ir': None}}
+        for ir, fr, side in zip(eq_irs, frs, ['left', 'right']):
+            fig, ax = plt.subplots(1, 2)
+            fig.set_size_inches(15, 7)
+            fr.plot_graph(fig=fig, ax=ax[0], show=False)
+            ir.plot_ir(fig=fig, ax=ax[1], max_time=2e-3)
+            plt.suptitle(f'Headphones {side}')
+            plots[side]['fig'] = fig
+            plots[side]['fr'] = ax[0]
+            plots[side]['ir'] = ax[1]
 
-        # Create FIR filter waveform plots
-        for i, eq_ir in enumerate(eq_irs):
-            fig = fig_l if i == 0 else fig_r
-            ax = ax_l if i == 0 else ax_r
-            plot_ir(eq_ir, estimator.fs, fig=fig, ax=ax[1], max_time=0.01)
-
-        # Create headphone equalization graphs
-        for i, fr in enumerate(frs):
-            fr.equalized_raw = fr.raw + fr.equalization
-            ax = ax_l if i == 0 else ax_r
-            ax = ax[0]
-            ax.plot(fr.frequency, fr.raw, color='black')
-            ax.plot(fr.frequency, fr.equalization, color='darkgreen')
-            ax.plot(fr.frequency, fr.equalized_raw, color='magenta')
-            ax.set_xlabel('Frequency (Hz)')
-            ax.semilogx()
-            ax.set_xlim([20, 20e3])
-            ax.set_ylim([-40, 20])
-            ax.set_ylabel('Amplitude (dBr)')
-            ax.set_title(fr.name)
-            ax.grid(True, which='major')
-            ax.grid(True, which='minor')
-            ax.xaxis.set_major_formatter(ticker.StrMethodFormatter('{x:.0f}'))
-            ax.legend(['Raw', 'Equalization', 'Equalized Raw'], fontsize=8)
-
-        # Sync FIR filter axes
-        y_lim = [
-            np.min([ax_l[1].get_ylim()[0], ax_r[1].get_ylim()[0]]),
-            np.max([ax_l[1].get_ylim()[1], ax_r[1].get_ylim()[1]])
-        ]
-        ax_l[1].set_ylim(y_lim)
-        ax_r[1].set_ylim(y_lim)
+        # Sync axes
+        sync_axes([plots['left']['fr'], plots['right']['fr']])
+        sync_axes([plots['left']['ir'], plots['right']['ir']])
 
         # Save headphone plots
-        fig_l.savefig(os.path.join(out_dir, 'Headphones Left.png'))
-        plt.close(fig_l)
-        fig_r.savefig(os.path.join(out_dir, 'Headphones Right.png'))
-        plt.close(fig_r)
+        for side in ['left', 'right']:
+            fig = plots[side]['fig']
+            fig.savefig(os.path.join(out_dir, f'Headphones {side}.png'))
+            plt.close(fig)
 
-        for j in range(impulse_responses.shape[0]):
-            # Equalize all left ear impulse responses with left ear headphone FIR filter and right ear impulse
-            # responses with right ear headphone FIR filter
-            filtered = convolve(impulse_responses[j, :], eq_irs[j % 2], mode='full')
-            compensated.append(filtered)
-
-        # Stack compensated impulse responses
-        if len(compensated):
-            impulse_responses = np.vstack(compensated)
+        # Equalize HRIR with headphone compensation FIR filters
+        for speaker, pair in hrir.irs.items():
+            for side, ir in pair.items():
+                if side == 'left':
+                    hrir.irs[speaker][side].data = convolve(ir.data, eq_irs[0].data, mode='full')
+                else:
+                    hrir.irs[speaker][side].data = convolve(ir.data, eq_irs[1].data, mode='full')
 
     # Normalize gain
     hrir.normalize(target_db=12)

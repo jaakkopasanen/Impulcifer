@@ -54,3 +54,32 @@ def magnitude_response(x, fs):
     X = np.fft.fft(x)
     X_mag = 20 * np.log10(np.abs(X))
     return f[0:int(np.ceil(nfft/2))], X_mag[0:int(np.ceil(nfft/2))]
+
+
+def sync_axes(axes, sync_x=True, sync_y=True):
+    """Synchronizes X and Y limits for axes
+
+    Args:
+        axes: List Axis objects
+        sync_x: Flag depicting whether to sync X-axis
+        sync_y: Flag depicting whether to sync Y-axis
+
+    Returns:
+
+    """
+    x_min = []
+    x_max = []
+    y_min = []
+    y_max = []
+    for ax in axes:
+        x_min.append(ax.get_xlim()[0])
+        x_max.append(ax.get_xlim()[1])
+        y_min.append(ax.get_ylim()[0])
+        y_max.append(ax.get_ylim()[1])
+    xlim = [np.min(x_min), np.max(x_max)]
+    ylim = [np.min(y_min), np.max(y_max)]
+    for ax in axes:
+        if sync_x:
+            ax.set_xlim(xlim)
+        if sync_y:
+            ax.set_ylim(ylim)

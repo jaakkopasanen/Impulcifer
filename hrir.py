@@ -57,8 +57,8 @@ class HRIR:
                 right = column[i + 1, :]  # Right ear of current speaker
                 if speaker not in self.irs:
                     self.irs[speaker] = dict()
-                self.irs[speaker]['left'] = ImpulseResponse(left, self.estimator)
-                self.irs[speaker]['right'] = ImpulseResponse(right, self.estimator)
+                self.irs[speaker]['left'] = ImpulseResponse(self.estimator.estimate(left), self.fs, left)
+                self.irs[speaker]['right'] = ImpulseResponse(self.estimator.estimate(right), self.fs, right)
             i += 2
 
     def write_wav(self, file_path, track_order=None, bit_depth=32):
@@ -81,7 +81,7 @@ class HRIR:
         ir_order = []
         for speaker, pair in self.irs.items():
             for side, ir in pair.items():
-                irs.append(ir.ir)
+                irs.append(ir.data)
                 ir_order.append(f'{speaker}-{side}')
 
         # Add silent tracks
@@ -110,8 +110,8 @@ class HRIR:
         left = []
         right = []
         for speaker, pair in self.irs.items():
-            left.append(pair['left'].ir)
-            right.append(pair['right'].ir)
+            left.append(pair['left'].data)
+            right.append(pair['right'].data)
         left = np.sum(np.vstack(left), axis=0)
         right = np.sum(np.vstack(right), axis=0)
         # Calculate magnitude responses
@@ -121,7 +121,7 @@ class HRIR:
         gain = np.max(np.vstack([mr_l, mr_r])) * -1 + target_db
         for speaker, pair in self.irs.items():
             for ir in pair.values():
-                ir.ir *= 10 ** (gain / 20)
+                ir.data *= 10 ** (gain / 20)
 
     def crop_heads(self, head_ms=1):
         """Crops heads of impulse responses
@@ -149,8 +149,8 @@ class HRIR:
                     raise ValueError(speaker + ' impulse response has lower delay to left ear than to right.')
                 # Crop out silence from the beginning, only required channel delay remains
                 # Secondary ear has additional delay for inter aural time difference
-                pair['left'].ir = pair['left'].ir[peak_left - delay:]
-                pair['right'].ir = pair['right'].ir[peak_left - delay:]
+                pair['left'].data = pair['left'].data[peak_left - delay:]
+                pair['right'].data = pair['right'].data[peak_left - delay:]
             else:
                 # Delay to right ear is smaller, this is must right side speaker
                 if speaker[1] == 'L':
@@ -159,13 +159,13 @@ class HRIR:
                     raise ValueError(speaker + ' impulse response has lower delay to right ear than to left.')
                 # Crop out silence from the beginning, only required channel delay remains
                 # Secondary ear has additional delay for inter aural time difference
-                pair['right'].ir = pair['right'].ir[peak_right - delay:]
-                pair['left'].ir = pair['left'].ir[peak_right - delay:]
+                pair['right'].data = pair['right'].data[peak_right - delay:]
+                pair['left'].data = pair['left'].data[peak_right - delay:]
 
             # Make sure impulse response starts from silence
             window = hanning(head * 2)[:head]
-            pair['left'].ir[:head] *= window
-            pair['right'].ir[:head] *= window
+            pair['left'].data[:head] *= window
+            pair['right'].data[:head] *= window
 
     def crop_tails(self):
         """Crops out tails after every impulse response has decayed to noise floor."""
@@ -182,8 +182,8 @@ class HRIR:
         tail_ind = max(tail_indices)
         for speaker, pair in self.irs.items():
             for ir in pair.values():
-                ir.ir = ir.ir[:tail_ind]
-                ir.ir *= np.concatenate([np.ones(len(ir.ir) - len(window)), window])
+                ir.data = ir.data[:tail_ind]
+                ir.data *= np.concatenate([np.ones(len(ir.data) - len(window)), window])
 
     def plot(self, dir_path=None):
         """Plots all impulse responses."""

@@ -9,12 +9,10 @@ from utils import magnitude_response
 
 
 class ImpulseResponse:
-    def __init__(self, recording, estimator):
+    def __init__(self, data, fs, recording=None):
+        self.fs = fs
+        self.data = data
         self.recording = recording
-        self.estimator = estimator
-        self.fs = self.estimator.fs
-        self.ir = estimator.estimate(recording)
-        self.delay = 0
 
     def peak_index(self):
         """Finds impulse reponse peak index
@@ -22,7 +20,7 @@ class ImpulseResponse:
         Returns:
             Peak index to impulse response data
         """
-        peaks, _ = signal.find_peaks(np.abs(self.ir) / np.max(np.abs(self.ir)), height=0.99)
+        peaks, _ = signal.find_peaks(np.abs(self.data) / np.max(np.abs(self.data)), height=0.99)
         return peaks[0]
 
     def decay(self, window_size_ms=1.0):
@@ -38,8 +36,8 @@ class ImpulseResponse:
         window_size = round(self.fs // 1000 * window_size_ms)
 
         # RMS windows
-        n = len(self.ir) // window_size
-        windows = np.vstack(np.split(self.ir[:n * window_size], n))
+        n = len(self.data) // window_size
+        windows = np.vstack(np.split(self.data[:n * window_size], n))
         rms = np.sqrt(np.mean(np.square(windows), axis=1))
 
         # Prevent division by zero in log10
@@ -85,7 +83,7 @@ class ImpulseResponse:
         Returns:
             None
         """
-        if len(np.nonzero(self.recording)[0]) == 0:
+        if self.recording is None or len(np.nonzero(self.recording)[0]) == 0:
             return
         if fig is None:
             fig, ax = plt.subplots()
@@ -135,8 +133,8 @@ class ImpulseResponse:
             None
         """
         if max_time is None:
-            max_time = len(self.ir) / self.fs
-        ir = self.ir[:int(max_time * self.fs)]
+            max_time = len(self.data) / self.fs
+        ir = self.data[:int(max_time * self.fs)]
 
         if fig is None:
             fig, ax = plt.subplots()
@@ -151,9 +149,12 @@ class ImpulseResponse:
 
         return fig, ax
 
+    def magnitude_response(self):
+        return magnitude_response(self.data, self.fs)
+
     def plot_fr(self, fig=None, ax=None, plot_file_path=None):
         """Plots frequency response."""
-        f, m = magnitude_response(self.ir, self.fs)
+        f, m = self.magnitude_response()
         fr = FrequencyResponse(name='Frequency response', frequency=f[1:], raw=m[1:])
         fr.interpolate()
         fr.smoothen_fractional_octave(
