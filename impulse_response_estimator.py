@@ -153,8 +153,7 @@ class ImpulseResponseEstimator(object):
     def from_wav(cls, file_path):
         """Creates ImpulseResponseEstimator instance from test signal WAV."""
         fs, data = read_wav(file_path)
-        ire = cls(duration=len(data) / fs, fs=fs)
-        print(np.max(ire.test_signal - data))
+        ire = cls(min_duration=(len(data) - 1) / fs, fs=fs)
         if np.max(ire.test_signal - data) > 1e-9:
             raise ValueError('Data read from WAV file does not match generated test signal. WAV file must be generated '
                              'with the current version of ImpulseResponseEstimator.')

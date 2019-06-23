@@ -1,17 +1,18 @@
 # -*- coding: utf-8 -*-
 
 import os
+from time import time
 import numpy as np
-import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
+import matplotlib.pyplot as plt
 import argparse
 from scipy import signal
 from scipy.signal import kaiser, hanning, convolve
-from PIL import Image
 from autoeq.frequency_response import FrequencyResponse
 from impulse_response_estimator import ImpulseResponseEstimator
+from hrir import HRIR
 from utils import read_wav, write_wav, magnitude_response
-from constants import SPEAKER_NAMES, IR_ORDER, SPEAKER_DELAYS
+from constants import IR_ORDER, SPEAKER_DELAYS
 
 
 def to_float(x):
@@ -352,191 +353,26 @@ def main(measure=False,
             headphones = os.path.join(dir_path, 'headphones.wav')
 
     # Read files
-    fs_rec, recording = read_wav(recording)
     estimator = ImpulseResponseEstimator.from_wav(test_signal)
-    if fs_rec != estimator.fs:
-        raise ValueError('Sampling rates of recording and test signal do not match.')
-    fs = fs_rec
+    hrir = HRIR(estimator)
+    hrir.open_recording(recording, speakers=speakers)
 
     if not os.path.isdir(out_dir):
         # Output directory does not exist, create it
         os.makedirs(out_dir, exist_ok=True)
 
-    plots = dict()
-    for ch_name in IR_ORDER:
-        fig, ax = plt.subplots(2, 2, num=ch_name)
-        plt.suptitle(ch_name)
-        fig.set_size_inches(15, 10)
-        plots[ch_name] = {
-            'figure': fig,
-            'ir': ax[0, 0],
-            'fr': ax[0, 1],
-            'decay': ax[1, 0],
-            'spectrogram': ax[1, 1],
-        }
-
-    # Logarithmic sine sweep measurement
-    if measure:  # TODO
-        raise NotImplementedError('Measurement is not yet implemented.')
-
-    # Split recording WAV file into individual mono tracks
-    recording = split_recording(recording, estimator.test_signal, speakers, fs, silence_length)
-
-    # Reorder tracks to match standard
-    recording = reorder_tracks(recording, speakers)
-
-    # Normalize to -0.1 dB
-    recording = normalize(recording, target_db=-0.1)
-
-    for i in range(recording.shape[0]):
-        spectrogram(
-            recording[i, :],
-            fs,
-            fig=plots[IR_ORDER[i]]['figure'],
-            ax=plots[IR_ORDER[i]]['spectrogram']
-        )
-
     # Write multi-channel WAV file with sine sweeps for debugging
-    write_wav(os.path.join(out_dir, 'preprocessed.wav'), fs, recording)
+    hrir.write_wav(os.path.join(out_dir, 'responses.wav'))
 
-    # Estimate impulse responses by deconvolution
-    impulse_responses = []
-    for i in range(recording.shape[0]):
-        track = recording[i, :]
-        if len(np.nonzero(track)[0]) > 0:
-            # Run deconvolution
-            impulse_response = estimator.estimate(track)
-            # Add to responses
-            impulse_responses.append(impulse_response)
-        else:
-            # Silent track
-            impulse_responses.append(np.zeros(estimator.test_signal.shape[0] + 1))
-    impulse_responses = np.vstack(impulse_responses)
+    # Plot
+    #hrir.plot(dir_path=out_dir)
+    #plt.show()
 
-    # Save impulse responses to file for debugging
-    write_wav(os.path.join(out_dir, 'responses.wav'), fs, impulse_responses)
+    # Crop noise and harmonics from the beginning
+    hrir.crop_heads()
 
-    # Crop heads
-    cropped = []
-    i = 0
-    while i < impulse_responses.shape[0]:
-        # Speaker tracks are paired so that first is left ear mic and second is right ear mic
-        left = impulse_responses[i]
-        right = impulse_responses[i + 1]
-        speaker = SPEAKER_NAMES[i // 2]
-        if len(np.nonzero(left)[0]) > 0 and len(np.nonzero(right)[0]) > 0:
-            impulse_response_decay(
-                left,
-                fs,
-                fig=plots[IR_ORDER[i]]['figure'],
-                ax=plots[IR_ORDER[i]]['decay'],
-                window_size_ms=1,
-                show_plot=False,
-            )
-            impulse_response_decay(
-                right,
-                fs,
-                fig=plots[IR_ORDER[i+1]]['figure'],
-                ax=plots[IR_ORDER[i+1]]['decay'],
-                window_size_ms=1,
-                show_plot=False,
-            )
-            # Crop head
-            left, right = crop_ir_head(left, right, speaker, fs)
-            cropped.append(left)
-            cropped.append(right)
-        elif len(np.nonzero(left)[0]) == 0 and len(np.nonzero(right)[0]) == 0:
-            # Silent tracks
-            cropped.append(left)
-            cropped.append(right)
-        else:
-            raise ValueError('Left and right ear recording pair must be non-zero for both or neither.')
-        i += 2
-
-    # Crop tails together
-    # Find indices after which there is only noise in each track
-    tail_indices = []
-    for i, track in enumerate(cropped):
-        if len(np.nonzero(track)[0]) > 0:
-            rms = impulse_response_decay(
-                track,
-                fs,
-                window_size_ms=1,
-            )
-            tail_indices.append(tail_index(rms, rms_window_size=fs / 1000))
-    # Crop all tracks by last tail index
-    tail_ind = max(tail_indices)
-    for i in range(len(cropped)):
-        cropped[i] = cropped[i][:tail_ind]
-    impulse_responses = np.vstack(cropped)
-
-    # Set decay plot X-max to 1000ms after IR tail crop point
-    for ch, obj in plots.items():
-        obj['decay'].set_xlim(obj['decay'].get_xlim()[0], 1000 * tail_ind // fs + 1000)
-
-    # Save IR waveform and frequency response plots
-    for i, ir in enumerate(cropped):
-        if len(np.nonzero(ir)[0]) > 0:
-            plot_ir(
-                ir,
-                fs,
-                fig=plots[IR_ORDER[i]]['figure'],
-                ax=plots[IR_ORDER[i]]['ir'],
-                max_time=0.1,
-                show_plot=False,
-            )
-            f, m = magnitude_response(ir, fs)
-            fr = FrequencyResponse(name='Frequency response', frequency=f[1:], raw=m[1:])
-            fr.interpolate()
-            fr.smoothen_fractional_octave(
-                window_size=1 / 3,
-                iterations=1,
-                treble_window_size=1 / 6,
-                treble_iterations=1,
-                treble_f_lower=100,
-                treble_f_upper=1000,
-
-            )
-            ax = plots[IR_ORDER[i]]['fr']
-            ax.set_xlabel('Frequency (Hz)')
-            ax.semilogx()
-            ax.set_xlim([20, 20e3])
-            ax.set_ylabel('Amplitude (dBr)')
-            ax.set_title(fr.name)
-            ax.grid(True, which='major')
-            ax.grid(True, which='minor')
-            ax.xaxis.set_major_formatter(ticker.StrMethodFormatter('{x:.0f}'))
-            ax.plot(fr.frequency, fr.raw, linewidth=0.5)
-            ax.plot(fr.frequency, fr.smoothed, linewidth=1)
-            ax.legend(['Raw', 'Smoothed'], fontsize=8)
-
-    # Sync axes
-    ir_ylim = [0.0, 0.0]
-    fr_ylim = [0.0, 0.0]
-    for ch, obj in plots.items():
-        if not obj['ir'].lines or not obj['fr'].lines:
-            continue
-        if obj['ir'].get_ylim()[0] < ir_ylim[0]:
-            ir_ylim[0] = obj['ir'].get_ylim()[0]
-        if obj['ir'].get_ylim()[1] > ir_ylim[1]:
-            ir_ylim[1] = obj['ir'].get_ylim()[1]
-        if obj['fr'].get_ylim()[0] < fr_ylim[0]:
-            fr_ylim[0] = obj['fr'].get_ylim()[0]
-        if obj['fr'].get_ylim()[1] > fr_ylim[1]:
-            fr_ylim[1] = obj['fr'].get_ylim()[1]
-    for ch, obj in plots.items():
-        obj['ir'].set_ylim(ir_ylim)
-        obj['fr'].set_ylim(fr_ylim)
-
-    # Save plots
-    for ch, obj in plots.items():
-        if obj['ir'].lines or obj['fr'].lines or obj['spectrogram'].lines or obj['decay'].lines:
-            file_path = os.path.join(out_dir, ch + '.png')
-            obj['figure'].savefig(file_path, dpi=480, bbox_inches='tight')
-            im = Image.open(file_path)
-            im = im.convert('P', palette=Image.ADAPTIVE, colors=60)
-            im.save(file_path, optimize=True)
-    plt.close('all')
+    # Crop noise from the tail
+    hrir.crop_tails()
 
     if compensate_headphones:
         # Read WAV file
@@ -609,7 +445,7 @@ def main(measure=False,
         for i, eq_ir in enumerate(eq_irs):
             fig = fig_l if i == 0 else fig_r
             ax = ax_l if i == 0 else ax_r
-            plot_ir(eq_ir, fs, fig=fig, ax=ax[1], max_time=0.01)
+            plot_ir(eq_ir, estimator.fs, fig=fig, ax=ax[1], max_time=0.01)
 
         # Create headphone equalization graphs
         for i, fr in enumerate(frs):
@@ -655,22 +491,17 @@ def main(measure=False,
             impulse_responses = np.vstack(compensated)
 
     # Normalize gain
-    left = np.sum(impulse_responses[[x for x in range(impulse_responses.shape[0]) if not x % 0]], axis=0)
-    right = np.sum(impulse_responses[[x for x in range(impulse_responses.shape[0]) if x % 0]], axis=0)
-    f_l, mr_l = magnitude_response(left, fs)
-    f_r, mr_r = magnitude_response(right, fs)
-    gain = np.max(np.abs(np.vstack(mr_l, mr_r))) * -1
-    print(gain)
-    impulse_responses *= 10**(gain / 20)
+    hrir.normalize(target_db=12)
 
-    # Write standard channel order HRIR
-    write_wav(os.path.join(out_dir, 'hrir.wav'), fs, impulse_responses)
+    # Write multi-channel WAV file with standard track order
+    hrir.write_wav(os.path.join(out_dir, 'hrir.wav'))
 
-    # Write HeSuVi channel order HRIR
-    hesuvi_order = ['FL-left', 'FL-right', 'SL-left', 'SL-right', 'BL-left', 'BL-right', 'FC-left', 'FR-right',
-                    'FR-left', 'SR-right', 'SR-left', 'BR-right', 'BR-left', 'FC-right']
-    indices = [IR_ORDER.index(ch) for ch in hesuvi_order]
-    write_wav(os.path.join(out_dir, 'hesuvi.wav'), fs, impulse_responses[indices, :])
+    # Write multi-channel WAV file with standard track order
+    hrir.write_wav(
+        os.path.join(out_dir, 'hesuvi.wav'),
+        track_order=['FL-left', 'FL-right', 'SL-left', 'SL-right', 'BL-left', 'BL-right', 'FC-left', 'FR-right',
+                     'FR-left', 'SR-right', 'SR-left', 'BR-right', 'BR-left', 'FC-right']
+    )
 
 
 def create_cli():
