@@ -152,7 +152,7 @@ class ImpulseResponse:
     def magnitude_response(self):
         return magnitude_response(self.data, self.fs)
 
-    def plot_fr(self, fig=None, ax=None, plot_file_path=None):
+    def plot_fr(self, fig=None, ax=None, plot_file_path=None, raw=True, smoothed=True):
         """Plots frequency response."""
         f, m = self.magnitude_response()
         fr = FrequencyResponse(name='Frequency response', frequency=f[1:], raw=m[1:])
@@ -176,9 +176,14 @@ class ImpulseResponse:
         ax.grid(True, which='major')
         ax.grid(True, which='minor')
         ax.xaxis.set_major_formatter(ticker.StrMethodFormatter('{x:.0f}'))
-        ax.plot(fr.frequency, fr.raw, linewidth=0.5)
-        ax.plot(fr.frequency, fr.smoothed, linewidth=1)
-        ax.legend(['Raw', 'Smoothed'], fontsize=8)
+        legend = []
+        if raw:
+            ax.plot(fr.frequency, fr.raw, linewidth=0.5)
+            legend.append('Raw')
+        if smoothed:
+            ax.plot(fr.frequency, fr.smoothed, linewidth=1)
+            legend.append('Smoothed')
+        ax.legend(legend, fontsize=8)
         if plot_file_path:
             fig.savefig(plot_file_path)
         return fig, ax

@@ -404,7 +404,7 @@ def main(measure=False,
             # Smoothen
             fr_eq.smoothen_heavy_light()
             # Equalize to flat
-            fr_eq.equalize(max_gain=15, treble_f_lower=4000, treble_f_upper=6000, treble_gain_k=1)
+            fr_eq.equalize(max_gain=15, treble_f_lower=20000, treble_f_upper=23000, treble_gain_k=1)
 
             # Copy equalization curve
             fr.equalization = fr_eq.equalization.copy()

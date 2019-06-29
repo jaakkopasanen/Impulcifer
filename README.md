@@ -84,7 +84,7 @@ Measurement gear and procedure goes here...
 ## Usage
 Usage instructions and command line arguments go here...
 
-## Algorithm
+## Algorithms
 - Overview
 - Impulse response estimation
   - Pre-ringing cancellation
@@ -96,3 +96,37 @@ Usage instructions and command line arguments go here...
 - Room correction
 - Headphone compensation
 - Plots
+
+### Headphone Compensation
+Headphones and measurement microphones have a frequency responses of their own and these will have to be compensated in
+order to have real HRIR and virtualized HRIR sound the same. Frequency response of headphones and measurement
+microphones can be compensated by measuring frequency response of headphones with the measurement microphones in ears
+and equalizing the measured frequency response flat. This way the frequency response at the ear canal opening will be
+the same when listening to the speakers or virtualizing the speakers on headphones.
+
+Impulcifer can do this headphone compensation as long as the data directory contains exponential sine sweep measurement
+file called `headphones.wav`. Impulcifer will calculate the frequency response of headphones-microphones system from the
+sine sweep recording and creates a equalization FIR filters by inverting the frequency responses of left and right ear.
+All left ear impulse responses of the measured HRIR are then equalized with the left side equalization FIR filter and
+right ear impulse responses with the right side equalization FIR filter. Impulcifer will take the absolute gain values
+of headphone-microphone frequency responses into account so any channel imbalances will be compensated as well.
+
+Because the headphone compensation recording is done with the same binaural measurement micrphones the equalization
+filters will equalize the microphone frequency responses too. This creates the benefit of not needing to have
+microphones with flat frequency response.
+
+Script `compensation.py` and recordings at `data/compensation` serve as a proof that headphone compensation works as
+intended. `data/compensation` contains three recordings: normal HRIR recording, heaphone sine sweep recording and
+virtualized HRIR recording. Virtualized HRIR is done on headphones with virtualization processing using HRIR created
+with the first two recordings. Graphs below show that the frequency responses of raw HRIR and virtualized HRIR match
+each other very closely. Narrow notches in the error curve are caused by smart smoothing which avoids narrow positive
+gain spikes in the equalization filters.
+
+![Headphone compensation graphs](https://raw.githubusercontent.com/jaakkopasanen/Impulcifer/master/data/headphone_compensation/headphone_compensation.png)
+
+This compensation scheme is based on a naive assumption that if a frequency response is the same at the ear
+canal opening when listening to speakers versus when listening virtualized speakers on headphones then the frequency
+responses will be the same at the ear drum. In truth this assumption does not hold true for most headphones. Even large
+around ear headphones will affect ear canal resonances changing the frequency response at the ear drum. Unfortunately
+it is not possible to measure headphone's effect of ear canal resonances with binaural microphones that sit at the ear
+canal entrance.
