@@ -211,7 +211,7 @@ most likely they went over it and clipped. Clipping causes massive distortion an
 highest point of the waveform is close to maximum (or lowest is close to minimum) you can check if they are in fact
 within the limits by selecting the recorded track, opening Amplify tool from Effect -> Amplify, setting "New Peak
 Amplitude" to 0.0 dB and looking at the "Amplification (dB)" value. If the value is above zero dB you are safe.
-![Amplify Tool](https://raw.githubusercontent.com/jaakkopasanen/Impulcifer/master/img/audacity_amplify.png)
+![Audacity Amplify Tool](https://raw.githubusercontent.com/jaakkopasanen/Impulcifer/master/img/audacity_amplify.png)
 
 Often the level is not going to be within optimal limits the first try and if this is the case you need to adjust mic
 input gain. Typically the audio interface has a physical knob for the microphone gain. If the recorded track is very
@@ -224,7 +224,7 @@ Select the track if not selected already and go to File -> Export -> Export Sele
 "WAV (Microsoft) 32-bit float PCM" and click Save. Audacity will ask you about the mix, if you selected custom mix from
 the settings earlier, and you should select the two channel output where first track is mapped to the first output
 channel and the second track to second output channel.
-![Amplify Tool](https://raw.githubusercontent.com/jaakkopasanen/Impulcifer/master/img/audacity_wav_export.png)
+![Audacity WAV Export](https://raw.githubusercontent.com/jaakkopasanen/Impulcifer/master/img/audacity_wav_export.png)
 
 
 - Speakers
