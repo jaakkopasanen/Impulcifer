@@ -90,6 +90,10 @@ have been proven to work well for the task. They have a small electret capsule a
 the microphones. Pictured below is the basic model with cable taped to a loop in order to get the cable exit ears from
 front and help further hold the microphones in place.
 
+Microphones are placed as close to ear canal opening as possible. Having the mics too far away from the ear canal could
+affect how the outer ear affects the sound and having the mics crammed too tightly into the ear canal could have huge
+dampening effect on the high frequencies.
+
 ![Binaural microphones](https://raw.githubusercontent.com/jaakkopasanen/Impulcifer/master/img/mics.jpg)
 
 Some commercially available binaural microphones are:
@@ -110,12 +114,6 @@ connectors can be used with normal USB audio interfaces which offer significantl
 performance than digital recorders. USB audio interfaces don't normally have plug-in power and therefore cannot be used
 with electret mics. XLR versions of The Sound Professionals mics have adapters which convert 48 volts of phantom power
 to 9 or 12 volts of plug-in power for the capsules.
-
-Microphones are placed as close to ear canal opening as possible. Having the mics too far away from the ear canal could
-affect how the outer ear affects the sound and having the mics crammed too tightly into the ear canal could have huge
-dampening effect on the high frequencies.
-
-![Microphone placement](https://raw.githubusercontent.com/jaakkopasanen/Impulcifer/master/img/mic_placement.jpg)
 
 #### Audio Interface
 Audio interface is the microphone input for the PC. As mentioned above most USB audio interfaces don't have plug-in
