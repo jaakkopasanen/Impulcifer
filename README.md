@@ -240,7 +240,33 @@ you have your first HRIR measurement finished. Now you need to process the sine 
 impulse responses with Impulcifer.
 
 ## Usage
-Usage instructions and command line arguments go here...
+Start command prompt and jump to Impulcifer-master folder and activate the virtual environment as described in the
+installation instructions. Sine sweep recordings are processed by running `impulcifer.py` with Python as shown in the
+demo section.
+
+Processing the recordings made above and saved to `my_hrir` folder can be done by running:
+```bash
+python impulcifer.py --dir_path=data\my_hrir --test_signal=data\sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav --speakers=FL,FR --compensate_headphones
+```
+
+You should have several WAV files and graphs in the folder. `hesuvi.wav` can now be used with HeSuVi to make your
+headphones sound like speakers. Let's see what these arguments mean.
+
+`--dir_path=data\my_hrir` tells Impulcifer that the recordings can be found in a folder called `my_hrir` under `data`.
+Impulcifer will also write all the output files into this folder.
+
+`--test_signal=data\sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav` tells Impulcifer that the sine sweep signal is this
+WAV file. Impulcifer will load the file and construct inverse filter from the test signal and use that inverse filter
+to turn sine sweep recordings into impulse responses. Seconds, bits, and Hertzs in the file name are actually not
+important and the file name can be anything. `--test` argument doesn't need to be supplied if the folder contains a file
+called `test.wav`.
+
+`--speakers=FL,FR` tells Impulcifer that speaker recording was performed on front
+left and front right speakers in that order. This could be for example `FL,FC,FR,SR,BR,BL,SL` when recording 7 channel
+surround setup.
+
+`--compensate_headphones` requests Impulcifer to compensate for the headphone frequency response using headphone sine
+sweep recording.
 
 ## Algorithms
 - Overview
