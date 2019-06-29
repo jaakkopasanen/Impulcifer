@@ -107,7 +107,7 @@ Some commercially available binaural microphones are:
 - [Core Sound binaural microphones](http://www.core-sound.com/mics/1.php) with 30 dB noise
 - [Core Sound high-end binaural microphones](http://www.core-sound.com/bk/1.php) with 28 dB noise for 4060 capsule and 23 dB noise for 4061 capsule
 
-Low noise is very desirable for the binaural microphones because lower noise will means better signal to noise ratio
+Low noise is very desirable for the binaural microphones because lower noise means better signal to noise ratio
 for the HRIR. All of these mics are electet microphones are as such require bias voltage (plug-in power) between 5 to
 12 volts. These are typically designed to be used with digital recorders. The Sound Professionals mics with XLR
 connectors can be used with normal USB audio interfaces which offer significantly lower equivalent input noise
@@ -153,7 +153,7 @@ virtualization but it's quite not known at this time which elements affect the l
 plausability of binaural reproduction. Electrostatic headphones and Sennheiser HD 800 at least have proven themselves as
 reliable tools for binaural use.
 
-### Sound Device Setup
+#### Sound Device Setup
 Input and output devices in Windows (or whatever OS you are on) need to be configured for the measurement process. One
 measurement is done with speakers and one with headphones so if you have different output devices (soundcard) for them
 then you need to configure both. For the sake of simplicity we will here go through the setup for using the audio
@@ -170,17 +170,63 @@ select same format from the Properties as you selected for the output device.
 ![Output devices](https://raw.githubusercontent.com/jaakkopasanen/Impulcifer/master/img/input_device.png)
 
 #### Recording with Audacity
-- Settings
-    - Custom output channel mapping
-   - Over-dub recording
-- Open sweep sequence
-- Headphones
-    - Done first in case microphones move
-    - Put on headphones and select headphones output
-    - Disable all processing
-    - Set volume to high comfortable level
-    - Record over-dub with headphones
-    - Select recorded stereo track -> File -> Export -> Export selected audio -> Save to directory as 32-bit WAV
+Audacity is a free audio workstation and while being simpler than it's commercial counterparts it has all the features
+needed for recording sine sweep measurements. Download and install Audacity from
+[Audacity's website](https://www.audacityteam.org/download/).
+
+Audacity can do overdub recordings meaning that Audacity will play back the existing tracks at the same time as it is
+recording new tracks. Overdub recordings need to be enabled in the options for this. Go to Edit -> Preferences ->
+Recording and select "Play other tracks while recording (overdub)" and "Record on a new track". Overdub recordings
+aren't strictly necessary but make the process easier when playing the sine sweeps on one or two speakers.
+
+When saving the recording as WAV file Audacity needs to create multi-track file. This too needs to be enabled from the
+options. Go to Edit -> Preferences -> Import / Export and select "Use custom mix".
+![Audacity settings](https://raw.githubusercontent.com/jaakkopasanen/Impulcifer/master/img/audacity_settings.png)
+
+Once you have the settings configured you can start recording. Open up exponential sine sweep sequence file from
+`data\sweep-seg-FL,FR-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav` in audacity. We'll record on two speakers in this
+guide but it is possible to record even full 7 channel surround sound setup with just one speaker.
+![Sweep sequence in Audacity](https://raw.githubusercontent.com/jaakkopasanen/Impulcifer/master/img/sweep_sequence.png)
+
+Input and output devices should be correctly selected if you set them as default devices in Windows Sound Settings but
+check once more in the tool bar that input and output device is correct (Zoom H1n in this case) and "2 (Stereo)
+Recording" is selected as the recording format for the input device.
+
+Now you're ready to start recording. Headphones should be measured first because putting the headphones on and taking
+them off might move the microphones if they are not secured well and while this isn't necessarily catastrophic we'll
+want the microphones to be in the same position for both the headphone measurement and the speaker measurement.
+
+Put on your headphone and set the output volume to a comfortable high level. High volume is better because it ensures
+higher signal to noise ratio but the volume shouldn't be so high that listening to the sine sweep is uncomfortable. Also
+too high volume might cause significant distortion on certain headphones and speakers. If you have any existing audio
+processing going on, you should disable them now.
+
+Click the big red record button to start recording. Single ascending frequency should start playing after two seconds of
+silence. End the recording with stop button after the entire sweep sequence has played. Recording has to be longer than
+the sweep sequence.
+![Recording in Audacity](https://raw.githubusercontent.com/jaakkopasanen/Impulcifer/master/img/headphones_recording.png)
+
+The waveform should reach close to maximum but should never touch it. If there are samples that are at the maximum then
+most likely they went over it and clipped. Clipping causes massive distortion and will ruin the measurement. If the
+highest point of the waveform is close to maximum (or lowest is close to minimum) you can check if they are in fact
+within the limits by selecting the recorded track, opening Amplify tool from Effect -> Amplify, setting "New Peak
+Amplitude" to 0.0 dB and looking at the "Amplification (dB)" value. If the value is above zero dB you are safe.
+![Amplify Tool](https://raw.githubusercontent.com/jaakkopasanen/Impulcifer/master/img/audacity_amplify.png)
+
+Often the level is not going to be within optimal limits the first try and if this is the case you need to adjust mic
+input gain. Typically the audio interface has a physical knob for the microphone gain. If the recorded track is very
+low on volume, increase the mic gain and reduce the gain if the waveform clipped. Run the recording again after
+adjusting the mic gain and remove the old track from the small x button on the top left corner of the track.
+
+When you have successfully recorded the frequency sweep with headphones you need to save the stereo track to a WAV file.
+Select the track if not selected already and go to File -> Export -> Export Selected Audio. Create a new folder inside
+`Impulcifer-master\data` called `my_hrir` and open the folder. Name the file as `headphones.wav` select file type as
+"WAV (Microsoft) 32-bit float PCM" and click Save. Audacity will ask you about the mix, if you selected custom mix from
+the settings earlier, and you should select the two channel output where first track is mapped to the first output
+channel and the second track to second output channel.
+![Amplify Tool](https://raw.githubusercontent.com/jaakkopasanen/Impulcifer/master/img/audacity_wav_export.png)
+
+
 - Speakers
     - Take headphones off
     - Disable all processing except room correction
