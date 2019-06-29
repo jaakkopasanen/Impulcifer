@@ -169,7 +169,7 @@ Next go to Recording tab on Windows sound settings, select your input device (au
 select same format from the Properties as you selected for the output device.
 ![Output devices](https://raw.githubusercontent.com/jaakkopasanen/Impulcifer/master/img/input_device.png)
 
-#### Recording with Audacity
+### Recording with Audacity
 Audacity is a free audio workstation and while being simpler than it's commercial counterparts it has all the features
 needed for recording sine sweep measurements. Download and install Audacity from
 [Audacity's website](https://www.audacityteam.org/download/).
@@ -196,7 +196,7 @@ Now you're ready to start recording. Headphones should be measured first because
 them off might move the microphones if they are not secured well and while this isn't necessarily catastrophic we'll
 want the microphones to be in the same position for both the headphone measurement and the speaker measurement.
 
-Put on your headphone and set the output volume to a comfortable high level. High volume is better because it ensures
+Put on your headphones and set the output volume to a comfortable high level. High volume is better because it ensures
 higher signal to noise ratio but the volume shouldn't be so high that listening to the sine sweep is uncomfortable. Also
 too high volume might cause significant distortion on certain headphones and speakers. If you have any existing audio
 processing going on, you should disable them now.
@@ -204,7 +204,7 @@ processing going on, you should disable them now.
 Click the big red record button to start recording. Single ascending frequency should start playing after two seconds of
 silence. End the recording with stop button after the entire sweep sequence has played. Recording has to be longer than
 the sweep sequence.
-![Recording in Audacity](https://raw.githubusercontent.com/jaakkopasanen/Impulcifer/master/img/headphones_recording.png)
+![Headphones Recording](https://raw.githubusercontent.com/jaakkopasanen/Impulcifer/master/img/headphones_recording.png)
 
 The waveform should reach close to maximum but should never touch it. If there are samples that are at the maximum then
 most likely they went over it and clipped. Clipping causes massive distortion and will ruin the measurement. If the
@@ -226,17 +226,18 @@ the settings earlier, and you should select the two channel output where first t
 channel and the second track to second output channel.
 ![Audacity WAV Export](https://raw.githubusercontent.com/jaakkopasanen/Impulcifer/master/img/audacity_wav_export.png)
 
+Speaker recording for a stereo setup goes exactly like the headphone recording. Unplug your headphones and set the
+volume on speakers to a comfortable high level. Only the original sweep sequence must be playing and to prevent
+Audacity from playing the headphone recording as well you need to mute it. Click the "Mute" button on the headphone
+recording track control panel below the delete button. Track turns grey.
 
-- Speakers
-    - Take headphones off
-    - Disable all processing except room correction
-    - Set volume to high comfortable level
-    - Record over-dub with speakers
-    - Adjust microphone input volume if level is not good and record again
-    - Select recorded stereo track -> File -> Export -> Export selected audio -> Save to directory as 32-bit WAV
+Start recording with the same red record button, wait silently and without moving until the sweep sequence has played
+entirely and stop the recording with the stop button.
+![Speakers Recording](https://raw.githubusercontent.com/jaakkopasanen/Impulcifer/master/img/speakers_recording.png)
 
-
-Measurement gear and procedure goes here...
+Check the speaker recording levels and export to a file called `recording.wav` inside the same folder. Congratulations,
+you have your first HRIR measurement finished. Now you need to process the sine sweep recordings into head related
+impulse responses with Impulcifer.
 
 ## Usage
 Usage instructions and command line arguments go here...
