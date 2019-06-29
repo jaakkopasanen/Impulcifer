@@ -90,7 +90,7 @@ have been proven to work well for the task. They have a small electret capsule a
 the microphones. Pictured below is the basic model with cable taped to a loop in order to get the cable exit ears from
 front and help further hold the microphones in place.
 
-![Binaural microphones](https://raw.githubusercontent.com/jaakkopasanen/Impulcifer/master/img/binaural_mics.jpg)
+![Binaural microphones](https://raw.githubusercontent.com/jaakkopasanen/Impulcifer/master/img/mics.jpg)
 
 Some commercially available binaural microphones are:
 - [The Sound Professionals SP-TFB-2](https://www.soundprofessionals.com/cgi-bin/gold/item/SP-TFB-2) with 36 dB noise and -30 dB sensitivity
