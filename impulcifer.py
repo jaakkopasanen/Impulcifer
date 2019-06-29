@@ -334,39 +334,31 @@ def plot_ir(ir, fs, fig=None, ax=None, max_time=None, show_plot=False, plot_file
         plt.show()
 
 
-def main(measure=False,
-         compensate_headphones=False,
-         dir_path=None,
-         recording=None,
-         headphones=None,
+def main(dir_path=None,
          test_signal=None,
          speakers=None,
-         silence_length=None):
+         compensate_headphones=False):
     """"""
-    out_dir = 'out'
-    if dir_path and os.path.isdir(dir_path):
-        out_dir = dir_path
-        if not recording and os.path.isfile(os.path.join(dir_path, 'recording.wav')):
-            recording = os.path.join(dir_path, 'recording.wav')
-        if not test_signal and os.path.isfile(os.path.join(dir_path, 'test.wav')):
-            test_signal = os.path.join(dir_path, 'test.wav')
-        if not headphones and os.path.isfile(os.path.join(dir_path, 'headphones.wav')):
-            headphones = os.path.join(dir_path, 'headphones.wav')
+    if dir_path is None or not os.path.isdir(dir_path):
+        raise NotADirectoryError(f'Given dir path "{dir_path}"" is not a directory.')
+
+    # Paths
+    dir_path = os.path.abspath(dir_path)
+    if not test_signal and os.path.isfile(os.path.join(dir_path, 'test.wav')):
+        test_signal = os.path.join(dir_path, 'test.wav')
+    recording = os.path.join(dir_path, 'recording.wav')
+    headphones = os.path.join(dir_path, 'headphones.wav')
 
     # Read files
     estimator = ImpulseResponseEstimator.from_wav(test_signal)
     hrir = HRIR(estimator)
     hrir.open_recording(recording, speakers=speakers)
 
-    if not os.path.isdir(out_dir):
-        # Output directory does not exist, create it
-        os.makedirs(out_dir, exist_ok=True)
-
     # Write multi-channel WAV file with sine sweeps for debugging
-    hrir.write_wav(os.path.join(out_dir, 'responses.wav'))
+    hrir.write_wav(os.path.join(dir_path, 'responses.wav'))
 
     # Plot
-    hrir.plot(dir_path=out_dir)
+    hrir.plot(dir_path=dir_path)
     # plt.show()
 
     # Crop noise and harmonics from the beginning
@@ -451,7 +443,7 @@ def main(measure=False,
         # Save headphone plots
         for side in ['left', 'right']:
             fig = plots[side]['fig']
-            fig.savefig(os.path.join(out_dir, f'Headphones {side}.png'))
+            fig.savefig(os.path.join(dir_path, f'Headphones {side}.png'))
             plt.close(fig)
 
         # Equalize HRIR with headphone compensation FIR filters
@@ -466,11 +458,11 @@ def main(measure=False,
     hrir.normalize(target_db=12)
 
     # Write multi-channel WAV file with standard track order
-    hrir.write_wav(os.path.join(out_dir, 'hrir.wav'))
+    hrir.write_wav(os.path.join(dir_path, 'hrir.wav'))
 
-    # Write multi-channel WAV file with standard track order
+    # Write multi-channel WAV file with HeSuVi track order
     hrir.write_wav(
-        os.path.join(out_dir, 'hesuvi.wav'),
+        os.path.join(dir_path, 'hesuvi.wav'),
         track_order=['FL-left', 'FL-right', 'SL-left', 'SL-right', 'BL-left', 'BL-right', 'FC-left', 'FR-right',
                      'FR-left', 'SR-right', 'SR-left', 'BR-right', 'BR-left', 'FC-right']
     )
@@ -478,8 +470,6 @@ def main(measure=False,
 
 def create_cli():
     arg_parser = argparse.ArgumentParser()
-    arg_parser.add_argument('--measure', action='store_true',
-                            help='Measure sine sweeps? Uses default audio output and input devices.')
     arg_parser.add_argument('--compensate_headphones', action='store_true',
                             help='Produce CSV file for AutoEQ from headphones sine sweep recordgin?')
     arg_parser.add_argument('--dir_path', type=str, help='Path to directory for recordings and outputs.')
@@ -489,10 +479,6 @@ def create_cli():
                                  'names. Supported names are "FL" (front left), "FR" (front right), '
                                  '"FC" (front center), "BL" (back left), "BR" (back right), '
                                  '"SL" (side left), "SR" (side right)". For example: "FL,FR".')
-    arg_parser.add_argument('--silence_length', type=float,
-                            help='Length of silence in the beginning, end and between recordings.')
-    arg_parser.add_argument('--headphones', type=str,
-                            help='File path to headphones sine sweep recording. Stereo WAV file is expected.')
     args = vars(arg_parser.parse_args())
     if 'speakers' in args and args['speakers'] is not None:
         args['speakers'] = args['speakers'].upper().split(',')
