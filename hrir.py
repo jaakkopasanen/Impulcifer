@@ -3,8 +3,7 @@
 import os
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy import signal
-from scipy.signal import kaiser, hanning, correlate
+from scipy.signal import kaiser, hanning
 from PIL import Image
 from impulse_response import ImpulseResponse
 from utils import read_wav, write_wav, magnitude_response
@@ -52,7 +51,10 @@ class HRIR:
         i = 0
         while i < recording.shape[0]:
             for j, column in enumerate(columns):
-                speaker = speakers[i // 2 + j]
+                speaker = speakers[i + j]
+                if speaker not in SPEAKER_NAMES:
+                    # Skip non-standard speakers. Useful for skipping the other sweep in center channel recording.
+                    continue
                 left = column[i, :]  # Left ear of current speaker
                 right = column[i + 1, :]  # Right ear of current speaker
                 if speaker not in self.irs:
