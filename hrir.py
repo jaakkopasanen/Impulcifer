@@ -51,7 +51,8 @@ class HRIR:
         i = 0
         while i < recording.shape[0]:
             for j, column in enumerate(columns):
-                speaker = speakers[i + j]
+                n = int(i // 2 * len(columns) + j)
+                speaker = speakers[n]
                 if speaker not in SPEAKER_NAMES:
                     # Skip non-standard speakers. Useful for skipping the other sweep in center channel recording.
                     continue
