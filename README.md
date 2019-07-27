@@ -65,12 +65,14 @@ has the sine sweep measurements done with speakers and `headphones.wav` has the 
 
 You can try out what Impulcifer does by running:
 ```bash
-python impulcifer.py --speakers=FL,FR --dir_path=data/demo --test_signal=data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav --compensate_headphones
+python impulcifer.py --dir_path=data/demo --speakers=FL,FR,SR,BR,BL,SL,X,FC --test_signal=data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav --compensate_headphones
 ```
 Impulcifer will now process the measurements and produce `hrir.wav` and `hesuvi.wav` which can be used with headphone
 speaker virtualization software such as [HeSuVi](https://sourceforge.net/projects/hesuvi/) to make headphones sound like
 speakers in a room. When testing with HeSuVi copy `hesuvi.wav` into `C:\Program Files\Equalizer APO\config\Hesuvi\hrir`,
 (re)start HeSuVi and select `hesuvi.wav` from the Common HRIRs list on Virtualization tab.
+
+Demo recording has 8 speakers recorded with two physical speakers. First front left and front right speakers were recorded on left and right speaker while looking directly in the middle of the speakers. Second iteration recorded side right and back right speakers on left and right speaker while looking 120 degrees left. When looking 120 degrees left, the left speaker which is normally 30 degrees to left is now 90 degrees to right and right speaker which is normally 30 degrees to right is now 150 degrees to right. 90 degrees right and 150 degrees right correspond to standard side right (SL) and back right (BR) speakers. Same trick was done for back left and side left channels but this time recording while looking at 120 degrees right. When looking at 120 degrees right, left speaker is at 150 degrees left and right speaker at 90 degrees left. Lastly center speaker was recorded while looking directly at right speaker. When looking at right speaker the left speaker is at 60 degrees to left which does not match any standard surround speakers. That's why the speaker sequence has X at the 7th element. This tells Impulcifer to simply ignore it.
 
 ## Measurement
 HRIR measurements are done with binaural microphones which are also called ear canal blocking microphones or in-ear
