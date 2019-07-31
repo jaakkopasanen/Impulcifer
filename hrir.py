@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import os
+import warnings
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.signal import kaiser, hanning
@@ -139,6 +140,7 @@ class HRIR:
             # Peaks
             peak_left = pair['left'].peak_index()
             peak_right = pair['right'].peak_index()
+            itd = np.abs(peak_left - peak_right) / self.fs
 
             # Speaker channel delay
             head = head_ms * self.fs // 1000
@@ -149,7 +151,11 @@ class HRIR:
                 if speaker[1] == 'R':
                     # Speaker name indicates this is right side speaker but delay to left ear is smaller than to right.
                     # There is something wrong with the measurement
-                    raise ValueError(speaker + ' impulse response has lower delay to left ear than to right.')
+                    warnings.warn(f'Warning: {speaker} measurement has lower delay to left ear than to right ear. '
+                                  f'{speaker} should be at the right side of the head so the sound should arrive first '
+                                  f'in the right ear. This is usually a problem with the measurement process or the '
+                                  f'speaker order given is not correct. Detected delay difference is '
+                                  f'{itd * 1000:.4f} milliseconds.')
                 # Crop out silence from the beginning, only required channel delay remains
                 # Secondary ear has additional delay for inter aural time difference
                 pair['left'].data = pair['left'].data[peak_left - delay:]
@@ -159,7 +165,11 @@ class HRIR:
                 if speaker[1] == 'L':
                     # Speaker name indicates this is left side speaker but delay to right ear is smaller than to left.
                     # There si something wrong with the measurement
-                    raise ValueError(speaker + ' impulse response has lower delay to right ear than to left.')
+                    warnings.warn(f'Warning: {speaker} measurement has lower delay to right ear than to left ear. '
+                                  f'{speaker} should be at the left side of the head so the sound should arrive first '
+                                  f'in the left ear. This is usually a problem with the measurement process or the '
+                                  f'speaker order given is not correct. Detected delay difference is '
+                                  f'{itd * 1000:.4f} milliseconds.')
                 # Crop out silence from the beginning, only required channel delay remains
                 # Secondary ear has additional delay for inter aural time difference
                 pair['right'].data = pair['right'].data[peak_right - delay:]
