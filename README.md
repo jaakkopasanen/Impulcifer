@@ -22,38 +22,45 @@ Impulcifer can do measurements with only one speaker so you don't need access to
 acoustic corrections which are normally possible in real rooms with DSP.
 
 ## Installing
-- Download [AutoEQ zip](https://github.com/jaakkopasanen/Impulcifer/archive/master.zip) and exctract to a convenient
-location. Or just git clone if you know what that means.
+- Download and install Git: https://git-scm.com/downloads
 - Download and install [Python3](https://www.python.org/getit/). Make sure to check
-*Install Python3 to PATH*
-- Install virtualenv. Run this on command prompt. Search `cmd` in Windows start menu.  
+*Add Python 3 to PATH*
+
+Rest will be done in terminal / command prompt. On Windows you'll find it by searching `cmd` in Start menu.
+You should be able to simply copy and paste in these commands. 
+
+- Install virtualenv.  
 ```bash
 pip install virtualenv
 ```
-- Go to Impulcifer folder  
+- Git clone Impulcifer. This will create a folder in your home folder called `Impulcifer`.  
 ```bash
-cd C:\path\to\Impulcifer-master
+git clone https://github.com/jaakkopasanen/Impulcifer
 ```
-- Create virtual environment  
+- Go to Impulcifer folder.  
+```bash
+cd Implucifer
+```
+- Create virtual environment for the project.  
 ```bash
 virtualenv venv
 ```
-- Activate virtualenv  
+- Activate virtualenv.  
 ```bash
 venv\Scripts\activate
 ```
-- Install required packages  
+- Install required packages.  
 ```bash
 pip install -r requirements.txt
 ```
-- Verify installation  
+- Verify installation. You should see help printed if everything went well.  
 ```bash
 python impulcifer.py -H
 ```
 
-When coming back at a later time you'll only need to activate virtual environment again
+When coming back at a later time you'll only need to activate virtual environment again before using Impulcifer.
 ```bash
-cd C:\path\to\Impulcifer-master
+cd Implucifer
 venv\Scripts\activate
 ```
 
