@@ -175,6 +175,28 @@ class HRIR:
                 pair['right'].data = pair['right'].data[peak_right - delay:]
                 pair['left'].data = pair['left'].data[peak_right - delay:]
 
+            # peak_left = pair['left'].peak_index()
+            # peak_right = pair['right'].peak_index()
+            # window_start = max(0, min(peak_left, peak_right) - 50)
+            # window_end = min(len(pair['left'].data), max(peak_left, peak_right) + 50)
+            # plt.plot(
+            #     np.arange(window_start, window_end)/self.fs*1000,
+            #     pair['left'].data[window_start:window_end],
+            #     color='#2f29ce'
+            # )
+            # plt.plot(
+            #     np.arange(window_start, window_end)/self.fs*1000,
+            #     pair['right'].data[window_start:window_end],
+            #     color='#e5312f'
+            # )
+            # plt.plot(peak_left/self.fs*1000, pair['left'].data[peak_left], 'o', color='black')
+            # plt.plot(peak_right/self.fs*1000, pair['right'].data[peak_right], 'o', color='black')
+            # plt.legend(['Left', 'Right'])
+            # plt.suptitle(speaker)
+            # plt.title(f'ITD = {(peak_right - peak_left)/self.fs*1000:.4f}ms')
+            # plt.grid()
+            # plt.show()
+
             # Make sure impulse response starts from silence
             window = hanning(head * 2)[:head]
             pair['left'].data[:head] *= window

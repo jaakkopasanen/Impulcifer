@@ -14,14 +14,31 @@ class ImpulseResponse:
         self.data = data
         self.recording = recording
 
-    def peak_index(self):
-        """Finds impulse reponse peak index
+    def peak_index(self, start=0, end=None, peak_height=0.67):
+        """Finds the first high (negative or positive) peak in the impulse response wave form.
 
         Returns:
             Peak index to impulse response data
         """
-        peaks, _ = signal.find_peaks(np.abs(self.data) / np.max(np.abs(self.data)), height=0.99)
-        return peaks[0]
+        if end is None:
+            end = len(self.data)
+        # Peak height threshold, relative to the data maximum value
+        # Copy to avoid manipulating the original data here
+        data = self.data.copy()
+        # Limit search to given range
+        data = data[start:end]
+        # Normalize to 1.0
+        data /= np.max(np.abs(data))
+        # Find positive peaks
+        peaks_pos, properties = signal.find_peaks(data, height=peak_height)
+        # Find negative peaks that are at least
+        peaks_neg, _ = signal.find_peaks(data * -1.0, height=peak_height)
+        # Combine positive and negative peaks
+        peaks = np.concatenate([peaks_pos, peaks_neg])
+        # Add start delta to peak indices
+        peaks += start
+        # Return the first one
+        return np.min(peaks)
 
     def decay(self, window_size_ms=1.0):
         """Decay graph with RMS values for each window.
