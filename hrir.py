@@ -4,7 +4,7 @@ import os
 import warnings
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.signal import kaiser, hanning
+from scipy.signal import hanning
 from PIL import Image
 from impulse_response import ImpulseResponse
 from utils import read_wav, write_wav, magnitude_response
@@ -244,7 +244,8 @@ class HRIR:
                 plots[speaker][side]['fig'] = fig
                 plots[speaker][side]['ax'] = ax
                 # Impulse response
-                ir.plot_ir(fig=fig, ax=ax[0, 0])
+                peak = ir.peak_index() / self.fs
+                ir.plot_ir(fig=fig, ax=ax[0, 0], start=peak - 0.01, end=peak + 0.09)
                 max_lims(lims['ir'], ax[0, 0])
                 # Frequency response
                 ir.plot_fr(fig=fig, ax=ax[0, 1])
@@ -273,7 +274,7 @@ class HRIR:
             for side, ir in pair.items():
                 if dir_path is not None:
                     file_path = os.path.join(dir_path, f'{speaker}-{side}.png')
-                    plots[speaker][side]['fig'].savefig(file_path, dpi=480, bbox_inches='tight')
+                    plots[speaker][side]['fig'].savefig(file_path, bbox_inches='tight')
                     # Optimize file size
                     im = Image.open(file_path)
                     im = im.convert('P', palette=Image.ADAPTIVE, colors=60)

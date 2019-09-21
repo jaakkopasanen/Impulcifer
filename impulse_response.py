@@ -137,29 +137,30 @@ class ImpulseResponse:
             fig.savefig(plot_file_path)
         return fig, ax
 
-    def plot_ir(self, fig=None, ax=None, max_time=None, plot_file_path=None):
+    def plot_ir(self, fig=None, ax=None, start=0.0, end=None, plot_file_path=None):
         """Plots impulse response wave form.
 
         Args:
             fig: Figure instance
             ax: Axis instance
-            max_time: Maximum time in seconds for cropping the tail.
+            start: Start of the plot in seconds
+            end: End of the plot in seconds
             plot_file_path: Path to a file for saving the plot
 
         Returns:
             None
         """
-        if max_time is None:
-            max_time = len(self.data) / self.fs
-        ir = self.data[:int(max_time * self.fs)]
+        if end is None:
+            end = len(self.data) / self.fs
+        ir = self.data[int(start * self.fs):int(end * self.fs)]
 
         if fig is None:
             fig, ax = plt.subplots()
-        ax.plot(np.arange(0, len(ir) / (self.fs / 1000), 1000 / self.fs), ir, linewidth=0.5)
+        ax.plot(np.arange(start * 1000, start * 1000 + 1000 / self.fs * len(ir), 1000 / self.fs), ir, linewidth=0.5)
         ax.set_xlabel('Time (ms)')
         ax.set_ylabel('Frequency (Hz)')
         ax.grid(True)
-        ax.set_title('Impulse response {ms} ms'.format(ms=int(max_time * 1000)))
+        ax.set_title('Impulse response'.format(ms=int(end * 1000)))
 
         if plot_file_path:
             fig.savefig(plot_file_path)

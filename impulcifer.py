@@ -4,7 +4,7 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 import argparse
-from scipy.signal import kaiser, convolve
+from scipy.signal import convolve
 from autoeq.frequency_response import FrequencyResponse
 from impulse_response_estimator import ImpulseResponseEstimator
 from hrir import HRIR
@@ -15,7 +15,8 @@ from utils import sync_axes
 def main(dir_path=None,
          test_signal=None,
          speakers=None,
-         compensate_headphones=False):
+         compensate_headphones=False,
+         plot=False):
     """"""
     if dir_path is None or not os.path.isdir(dir_path):
         raise NotADirectoryError(f'Given dir path "{dir_path}"" is not a directory.')
@@ -35,9 +36,10 @@ def main(dir_path=None,
     # Write multi-channel WAV file with sine sweeps for debugging
     hrir.write_wav(os.path.join(dir_path, 'responses.wav'))
 
-    # Plot
-    hrir.plot(dir_path=dir_path)
-    # plt.show()
+    if plot:
+        # Plot
+        os.makedirs(os.path.join(dir_path, 'plots'))
+        hrir.plot(dir_path=os.path.join(dir_path, 'plots'))
 
     # Crop noise and harmonics from the beginning
     hrir.crop_heads()
@@ -102,27 +104,28 @@ def main(dir_path=None,
             frs[1].equalization += biases[0] - biases[1]
             frs[1].equalized_raw += biases[0] - biases[1]
 
-        # Headphone plots
-        plots = {'left': {'fr': None, 'ir': None}, 'right': {'fr': None, 'ir': None}}
-        for ir, fr, side in zip(eq_irs, frs, ['left', 'right']):
-            fig, ax = plt.subplots(1, 2)
-            fig.set_size_inches(15, 7)
-            fr.plot_graph(fig=fig, ax=ax[0], show=False)
-            ir.plot_ir(fig=fig, ax=ax[1], max_time=2e-3)
-            plt.suptitle(f'Headphones {side}')
-            plots[side]['fig'] = fig
-            plots[side]['fr'] = ax[0]
-            plots[side]['ir'] = ax[1]
+        if plot:
+            # Headphone plots
+            plots = {'left': {'fr': None, 'ir': None}, 'right': {'fr': None, 'ir': None}}
+            for ir, fr, side in zip(eq_irs, frs, ['left', 'right']):
+                fig, ax = plt.subplots(1, 2)
+                fig.set_size_inches(15, 7)
+                fr.plot_graph(fig=fig, ax=ax[0], show=False)
+                ir.plot_ir(fig=fig, ax=ax[1], end=2e-3)
+                plt.suptitle(f'Headphones {side}')
+                plots[side]['fig'] = fig
+                plots[side]['fr'] = ax[0]
+                plots[side]['ir'] = ax[1]
 
-        # Sync axes
-        sync_axes([plots['left']['fr'], plots['right']['fr']])
-        sync_axes([plots['left']['ir'], plots['right']['ir']])
+            # Sync axes
+            sync_axes([plots['left']['fr'], plots['right']['fr']])
+            sync_axes([plots['left']['ir'], plots['right']['ir']])
 
-        # Save headphone plots
-        for side in ['left', 'right']:
-            fig = plots[side]['fig']
-            fig.savefig(os.path.join(dir_path, f'Headphones {side}.png'))
-            plt.close(fig)
+            # Save headphone plots
+            for side in ['left', 'right']:
+                fig = plots[side]['fig']
+                fig.savefig(os.path.join(dir_path, 'plots', f'Headphones {side}.png'))
+                plt.close(fig)
 
         # Equalize HRIR with headphone compensation FIR filters
         for speaker, pair in hrir.irs.items():
@@ -157,6 +160,7 @@ def create_cli():
                                  'names. Supported names are "FL" (front left), "FR" (front right), '
                                  '"FC" (front center), "BL" (back left), "BR" (back right), '
                                  '"SL" (side left), "SR" (side right)". For example: "FL,FR".')
+    arg_parser.add_argument('--plot', action='store_true', help='Plot graphs for debugging.')
     args = vars(arg_parser.parse_args())
     if 'speakers' in args and args['speakers'] is not None:
         args['speakers'] = args['speakers'].upper().split(',')
