@@ -19,7 +19,7 @@ demos is the same what Impulcifer uses.
 These demos are trying to make headphones sound as much as possible like the speakers they have in the demo room for a
 good [wow](https://www.youtube.com/watch?v=KlLMlJ2tDkg) effect. Impulcifer actually takes this even further because
 Impulcifer can do measurements with only one speaker so you don't need access to surround speaker setup and can do room
-acoustic corrections which are normally possible in real rooms with DSP.
+acoustic corrections which are normally not possible in real rooms with DSP.
 
 ## Installing
 Impulcifer is used from a command line and requires some prerequisites. These installation instructions will guide you
