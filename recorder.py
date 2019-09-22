@@ -10,6 +10,10 @@ import argparse
 import warnings
 
 
+class DeviceNotFoundError(Exception):
+    pass
+
+
 def record_target(file_path, length, fs):
     """Records audio and writes it to a file.
 
@@ -65,9 +69,8 @@ def get_device(device_name, kind, host_api=None, min_channels=1):
         device = sd.query_devices(device_name, kind=kind)
         if device[f'max_{kind}_channels'] < min_channels:
             # Channel count not satisfied
-            print(f'Found {kind} device "{device["name"]} {host_api_names[device["hostapi"]]}"" '
-                  f'but minimum number of channels is not satisfied. 1')
-            device = None
+            raise DeviceNotFoundError(f'Found {kind} device "{device["name"]} {host_api_names[device["hostapi"]]}"" '
+                                      f'but minimum number of channels is not satisfied. 1')
     elif not re.search(host_api_pattern, device_name) and host_api is not None:
         # Host API not specified in the name but host API is given as parameter
         try:
@@ -75,15 +78,11 @@ def get_device(device_name, kind, host_api=None, min_channels=1):
             device = sd.query_devices(f'{device_name} {host_api}', kind=kind)
         except ValueError:
             # Zero devices
-            # Try to find device without host API
-            device = sd.query_devices(device_name, kind=kind)
-            print(f'No device found with name "{device_name}" and host API "{host_api}". '
-                  f'Falling back to "{device["name"]} {host_api_names[device["hostapi"]]}".')
+            raise DeviceNotFoundError(f'No device found with name "{device_name}" and host API "{host_api}". ')
         if device[f'max_{kind}_channels'] < min_channels:
             # Channel count not satisfied
-            print(f'Found {kind} device "{device["name"]} {host_api_names[device["hostapi"]]}" '
-                  f'but minimum number of channels is not satisfied. 2')
-            device = None
+            raise DeviceNotFoundError(f'Found {kind} device "{device["name"]} {host_api_names[device["hostapi"]]}" '
+                                      f'but minimum number of channels is not satisfied. 2')
     else:
         # Host API not in the name and host API is not given as parameter
         host_api_preference = [x for x in ['DirectSound', 'MME', 'WASAPI'] if x in host_api_names]
@@ -98,7 +97,7 @@ def get_device(device_name, kind, host_api=None, min_channels=1):
             except ValueError:
                 pass
         if device is None:
-            print('Could not find device which satisfies minimum channel count.')
+            raise DeviceNotFoundError('Could not find any device which satisfies minimum channel count.')
 
     return device
 

@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+import os
 import numpy as np
 import soundfile as sf
 
@@ -14,6 +15,8 @@ def read_wav(file_path):
         - sampling frequency as integer
         - wav data as numpy array with one row per track, samples in range -1..1
     """
+    if not os.path.isfile(file_path):
+        raise FileNotFoundError(f'File in path "{os.path.abspath(file_path)}" does not exist.')
     data, fs = sf.read(file_path)
     if len(data.shape) > 1:
         # Soundfile has tracks on columns, we want them on rows

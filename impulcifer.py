@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import os
+import re
 import numpy as np
 import matplotlib.pyplot as plt
 import argparse
@@ -10,6 +11,7 @@ from impulse_response_estimator import ImpulseResponseEstimator
 from hrir import HRIR
 from impulse_response import ImpulseResponse
 from utils import sync_axes
+from constants import SPEAKER_NAMES
 
 
 def main(dir_path=None,
@@ -31,7 +33,22 @@ def main(dir_path=None,
     # Read files
     estimator = ImpulseResponseEstimator.from_wav(test_signal)
     hrir = HRIR(estimator)
-    hrir.open_recording(recording, speakers=speakers)
+
+    if speakers is None:
+        # Speakers not given, use multiple recording files with speaker names in the file names
+        # Files must be of pattern FL,FR,BR.wav
+        speaker_pattern = f'({"|".join(SPEAKER_NAMES + ["X"])})'
+        pattern = r'^{speaker_pattern}+(,{speaker_pattern})*\.wav$'.format(speaker_pattern=speaker_pattern)
+        for file_name in [f for f in os.listdir(dir_path) if re.match(pattern, f)]:
+            # Read the speaker names from the file name into a list
+            speakers = file_name.replace('.wav', '').split(',')
+            # Form absolute path
+            file_name = os.path.join(dir_path, file_name)
+            # Open the file and add tracks to HRIR
+            hrir.open_recording(file_name, speakers=speakers)
+    else:
+        # Speakers give, use recording.wav
+        hrir.open_recording(recording, speakers=speakers)
 
     # Write multi-channel WAV file with sine sweeps for debugging
     hrir.write_wav(os.path.join(dir_path, 'responses.wav'))
@@ -47,7 +64,7 @@ def main(dir_path=None,
     # Crop noise from the tail
     hrir.crop_tails()
 
-    if compensate_headphones:
+    if os.path.isfile(headphones):
         # Read WAV file
         hp_irs = HRIR(estimator)
         hp_irs.open_recording(headphones, speakers=['FL', 'FR'])
@@ -136,7 +153,7 @@ def main(dir_path=None,
                     hrir.irs[speaker][side].data = convolve(ir.data, eq_irs[1].data, mode='full')
 
     # Normalize gain
-    hrir.normalize(target_db=12)
+    hrir.normalize(target_db=0)
 
     # Write multi-channel WAV file with standard track order
     hrir.write_wav(os.path.join(dir_path, 'hrir.wav'))
@@ -151,11 +168,9 @@ def main(dir_path=None,
 
 def create_cli():
     arg_parser = argparse.ArgumentParser()
-    arg_parser.add_argument('--compensate_headphones', action='store_true',
-                            help='Produce CSV file for AutoEQ from headphones sine sweep recordgin?')
     arg_parser.add_argument('--dir_path', type=str, help='Path to directory for recordings and outputs.')
     arg_parser.add_argument('--test_signal', type=str, help='File path to sine sweep test signal.')
-    arg_parser.add_argument('--speakers', type=str,
+    arg_parser.add_argument('--speakers', type=str, default=argparse.SUPPRESS,
                             help='Order of speakers in the recording as a comma separated list of speaker channel '
                                  'names. Supported names are "FL" (front left), "FR" (front right), '
                                  '"FC" (front center), "BL" (back left), "BR" (back right), '
