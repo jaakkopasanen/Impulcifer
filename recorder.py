@@ -26,7 +26,9 @@ def record_target(file_path, length, fs):
         None
     """
     recording = sd.rec(length, samplerate=fs, channels=2, blocking=True)
+    max_gain = 20 * np.log10(np.max(np.abs(recording)))
     write_wav(file_path, fs, recording)
+    print(f'Headroom: {-1.0*max_gain:.1f} dB')
 
 
 def get_host_api_names():
