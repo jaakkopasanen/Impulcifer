@@ -115,11 +115,11 @@ following commands at all and you can simply copy-paste them for super quick pro
 Steps and commands for doing measurements with 7.1 surround system:
 - Put microphones in ears, put headphones on and run
 ```bash
-python recorder.py --play="data/sweep-seg-FL,FR-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" --record="my_hrir/headphones.wav"
+python recorder.py --play="data/sweep-seg-FL,FR-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" --record="data/my_hrir/headphones.wav"
 ```
 - Take heaphones off, look forward and run  
 ```bash
-python recorder.py --play="data/sweep-seg-FL,FC,FR,SR,BR,BL,SL-7.1-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" --record="my_hrir/FL,FC,FR,SR,BR,BL,SL.wav"
+python recorder.py --play="data/sweep-seg-FL,FC,FR,SR,BR,BL,SL-7.1-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" --record="data/my_hrir/FL,FC,FR,SR,BR,BL,SL.wav"
 ```
 - Process recordings  
 ```bash
@@ -130,26 +130,26 @@ python impulcifer.py --dir_path="data/my_hrir" --test_signal="data/sweep-6.15s-4
 Steps and commands for doing measurements with two speakers in four stages:
 - Put microphones in ears, put headphones on and run
 ```bash
-python recorder.py --play="data/sweep-seg-FL,FR-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" --record="my_hrir/headphones.wav"
+python recorder.py --play="data/sweep-seg-FL,FR-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" --record="data/my_hrir/headphones.wav"
 ```
 - Take heaphones off, look forward and run  
 ```bash
-python recorder.py --play="data/sweep-seg-FL,FR-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" --record="my_hrir/FL,FR.wav"
+python recorder.py --play="data/sweep-seg-FL,FR-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" --record="data/my_hrir/FL,FR.wav"
 ```
 - Look 120 degrees left (left speaker should be on your right) and run  
 ```bash
-python recorder.py --play="data/sweep-seg-FL,FR-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" --record="my_hrir/SR,BR.wav"
+python recorder.py --play="data/sweep-seg-FL,FR-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" --record="data/my_hrir/SR,BR.wav"
 ```
 - Look 120 degrees right (right speaker should be on your left) and run  
 ```bash
-python recorder.py --play="data/sweep-seg-FL,FR-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" --record="my_hrir/BL,SL.wav"
+python recorder.py --play="data/sweep-seg-FL,FR-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" --record="data/my_hrir/BL,SL.wav"
 ```
 - Look directly at the left (or right) speaker and run either one of these commands  
 ```bash
 # Using left speaker 
-python recorder.py --play="data/sweep-seg-FL-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" --record="my_hrir/FC.wav"
+python recorder.py --play="data/sweep-seg-FL-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" --record="data/my_hrir/FC.wav"
 # Using right speaker 
-python recorder.py --play="data/sweep-seg-FR-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" --record="my_hrir/FC.wav"
+python recorder.py --play="data/sweep-seg-FR-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" --record="data/my_hrir/FC.wav"
 ```
 - Process recordings  
 ```bash
@@ -163,35 +163,35 @@ Steps and command for doing measurements with just a single speaker in 7 steps. 
 cable terminals in the amplifier. This commands assume the speaker is connected to left speaker terminals.
 - Put microphones in ears, put headphones on and run
 ```bash
-python recorder.py --play="data/sweep-seg-FL,FR-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" --record="my_hrir/headphones.wav"
+python recorder.py --play="data/sweep-seg-FL,FR-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" --record="data/my_hrir/headphones.wav"
 ```
 - Look 30 degrees right of the speaker (speaker on your front left) and run  
 ```bash
-python recorder.py --play="data/sweep-seg-FL-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" --record="my_hrir/FL.wav"
+python recorder.py --play="data/sweep-seg-FL-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" --record="data/my_hrir/FL.wav"
 ```
 - Look directly at the speaker and run  
 ```bash
-python recorder.py --play="data/sweep-seg-FL-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" --record="my_hrir/FC.wav"
+python recorder.py --play="data/sweep-seg-FL-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" --record="data/my_hrir/FC.wav"
 ```
 - Look 30 degrees left of the speaker (speaker on you front right) and run  
 ```bash
-python recorder.py --play="data/sweep-seg-FL-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" --record="my_hrir/FR.wav"
+python recorder.py --play="data/sweep-seg-FL-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" --record="data/my_hrir/FR.wav"
 ```
 - Look 90 degrees left of the speaker (speaker on your right) and run  
 ```bash
-python recorder.py --play="data/sweep-seg-FL-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" --record="my_hrir/SR.wav"
+python recorder.py --play="data/sweep-seg-FL-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" --record="data/my_hrir/SR.wav"
 ```
 - Look 150 degrees left of the speaker (speaker on your back right) and run  
 ```bash
-python recorder.py --play="data/sweep-seg-FL-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" --record="my_hrir/BR.wav"
+python recorder.py --play="data/sweep-seg-FL-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" --record="data/my_hrir/BR.wav"
 ```
 - Look 150 degrees right of the speaker (speaker on you back left) and run  
 ```bash
-python recorder.py --play="data/sweep-seg-FL-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" --record="my_hrir/BL.wav"
+python recorder.py --play="data/sweep-seg-FL-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" --record="data/my_hrir/BL.wav"
 ```
 - Look 90 degrees right of the speaker (speaker on your left) and run  
 ```bash
-python recorder.py --play="data/sweep-seg-FL-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" --record="my_hrir/SL.wav"
+python recorder.py --play="data/sweep-seg-FL-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" --record="data/my_hrir/SL.wav"
 ```
 - Process recordings  
 ```bash
