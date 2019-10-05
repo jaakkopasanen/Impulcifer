@@ -10,14 +10,12 @@ from autoeq.frequency_response import FrequencyResponse
 from impulse_response_estimator import ImpulseResponseEstimator
 from hrir import HRIR
 from impulse_response import ImpulseResponse
-from utils import sync_axes
+from utils import sync_axes, read_wav
 from constants import SPEAKER_NAMES
 
 
 def main(dir_path=None,
          test_signal=None,
-         speakers=None,
-         compensate_headphones=False,
          plot=False):
     """"""
     if dir_path is None or not os.path.isdir(dir_path):
@@ -27,28 +25,23 @@ def main(dir_path=None,
     dir_path = os.path.abspath(dir_path)
     if not test_signal and os.path.isfile(os.path.join(dir_path, 'test.wav')):
         test_signal = os.path.join(dir_path, 'test.wav')
-    recording = os.path.join(dir_path, 'recording.wav')
     headphones = os.path.join(dir_path, 'headphones.wav')
+    eq = os.path.join(dir_path, 'eq.wav')
 
     # Read files
     estimator = ImpulseResponseEstimator.from_wav(test_signal)
     hrir = HRIR(estimator)
 
-    if speakers is None:
-        # Speakers not given, use multiple recording files with speaker names in the file names
-        # Files must be of pattern FL,FR,BR.wav
-        speaker_pattern = f'({"|".join(SPEAKER_NAMES + ["X"])})'
-        pattern = r'^{speaker_pattern}+(,{speaker_pattern})*\.wav$'.format(speaker_pattern=speaker_pattern)
-        for file_name in [f for f in os.listdir(dir_path) if re.match(pattern, f)]:
-            # Read the speaker names from the file name into a list
-            speakers = file_name.replace('.wav', '').split(',')
-            # Form absolute path
-            file_name = os.path.join(dir_path, file_name)
-            # Open the file and add tracks to HRIR
-            hrir.open_recording(file_name, speakers=speakers)
-    else:
-        # Speakers give, use recording.wav
-        hrir.open_recording(recording, speakers=speakers)
+    # Files must be of pattern FL,FR,BR.wav
+    speaker_pattern = f'({"|".join(SPEAKER_NAMES + ["X"])})'
+    pattern = r'^{speaker_pattern}+(,{speaker_pattern})*\.wav$'.format(speaker_pattern=speaker_pattern)
+    for file_name in [f for f in os.listdir(dir_path) if re.match(pattern, f)]:
+        # Read the speaker names from the file name into a list
+        speakers = file_name.replace('.wav', '').split(',')
+        # Form absolute path
+        file_name = os.path.join(dir_path, file_name)
+        # Open the file and add tracks to HRIR
+        hrir.open_recording(file_name, speakers=speakers)
 
     # Write multi-channel WAV file with sine sweeps for debugging
     hrir.write_wav(os.path.join(dir_path, 'responses.wav'))
@@ -112,12 +105,12 @@ def main(dir_path=None,
         # Levels might be different due to measurement devices or microphone placement
         if biases[0] > biases[1]:
             # Left headphone measurement is louder, bring it down to level of right headphone
-            eq_irs[0].data *= 10**((biases[1]-biases[0]) / 20)
+            eq_irs[0].data *= 10 ** ((biases[1] - biases[0]) / 20)
             frs[0].equalization += biases[1] - biases[0]
             frs[0].equalized_raw += biases[1] - biases[0]
         else:
             # Right headphone measurement is louder, bring it down to level of left headphone
-            eq_irs[1].data *= 10**((biases[0] - biases[1]) / 20)
+            eq_irs[1].data *= 10 ** ((biases[0] - biases[1]) / 20)
             frs[1].equalization += biases[0] - biases[1]
             frs[1].equalized_raw += biases[0] - biases[1]
 
@@ -147,10 +140,20 @@ def main(dir_path=None,
         # Equalize HRIR with headphone compensation FIR filters
         for speaker, pair in hrir.irs.items():
             for side, ir in pair.items():
-                if side == 'left':
-                    hrir.irs[speaker][side].data = convolve(ir.data, eq_irs[0].data, mode='full')
-                else:
-                    hrir.irs[speaker][side].data = convolve(ir.data, eq_irs[1].data, mode='full')
+                eq_ir = eq_irs[0] if side == 'left' else eq_irs[1]
+                hrir.irs[speaker][side].data = convolve(ir.data, eq_ir.data, mode='full')
+
+    # Apply given equalization filter
+    if os.path.isfile(eq):
+        fs, fir = read_wav(eq)
+        if len(fir.shape) == 1 or fir.shape[0] == 1:
+            # Single track in the WAV file, use it for both channels
+            fir = np.tile(fir, (2, 1))
+        # Equalize each impulse response in the HRIR with eq FIR filter
+        for speaker, pair in hrir.irs.items():
+            for side, ir in pair.items():
+                eq_ir = fir[0, :] if side == 'left' else fir[1, :]
+                hrir.irs[speaker][side].data = convolve(ir.data, eq_ir, mode='full')
 
     # Normalize gain
     hrir.normalize(target_db=0)
@@ -169,12 +172,7 @@ def main(dir_path=None,
 def create_cli():
     arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument('--dir_path', type=str, help='Path to directory for recordings and outputs.')
-    arg_parser.add_argument('--test_signal', type=str, help='File path to sine sweep test signal.')
-    arg_parser.add_argument('--speakers', type=str, default=argparse.SUPPRESS,
-                            help='Order of speakers in the recording as a comma separated list of speaker channel '
-                                 'names. Supported names are "FL" (front left), "FR" (front right), '
-                                 '"FC" (front center), "BL" (back left), "BR" (back right), '
-                                 '"SL" (side left), "SR" (side right)". For example: "FL,FR".')
+    arg_parser.add_argument('--test_signal', type=str, help='Path to sine sweep test signal.')
     arg_parser.add_argument('--plot', action='store_true', help='Plot graphs for debugging.')
     args = vars(arg_parser.parse_args())
     if 'speakers' in args and args['speakers'] is not None:

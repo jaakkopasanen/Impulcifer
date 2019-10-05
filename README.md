@@ -123,7 +123,7 @@ python recorder.py --play="data/sweep-seg-FL,FC,FR,SR,BR,BL,SL-7.1-6.15s-48000Hz
 ```
 - Process recordings  
 ```bash
-python impulcifer.py --dir_path="data/my_hrir" --test_signal="data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav"
+python impulcifer.py --test_signal="data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" --dir_path="data/my_hrir"
 ```
 
 ### Stereo Speaker Setup
@@ -153,7 +153,7 @@ python recorder.py --play="data/sweep-seg-FR-stereo-6.15s-48000Hz-32bit-2.93Hz-2
 ```
 - Process recordings  
 ```bash
-python impulcifer.py --dir_path="data/my_hrir" --test_signal="data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav"
+python impulcifer.py --test_signal="data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" --dir_path="data/my_hrir" 
 ```
 
 ### Single Speaker
@@ -195,11 +195,11 @@ python recorder.py --play="data/sweep-seg-FL-stereo-6.15s-48000Hz-32bit-2.93Hz-2
 ```
 - Process recordings  
 ```bash
-python impulcifer.py --dir_path="data/my_hrir" --test_signal="data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav"
+python impulcifer.py --test_signal="data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" --dir_path="data/my_hrir"
 ```
 
 ## Processing
-Once you have obtained the sine sweep recordings, you can turn them into HRIR file with Impulcifer. All the processing
+Once you have obtained the sine sweep recordings, you can turn them into a HRIR file with Impulcifer. All the processing
 is done by running a single command on command line. The command below assumes you have made a speaker recording and
 a headphones recording and saved the recording files into `data/my_hrir` folder. Start command prompt, jump to
 Impulcifer folder and activate the virtual environment as described in the installation instructions if you don't have
@@ -216,16 +216,34 @@ Impulcifer will also write all the output files into this folder.
 
 `--test_signal=data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav` tells Impulcifer that the sine sweep signal is this
 WAV file. Impulcifer will load the file and construct inverse filter from the test signal and use that inverse filter
-to turn sine sweep recordings into impulse responses. Seconds, bits, and Hertzs in the file name are actually not
+to turn sine sweep recordings into impulse responses. Seconds, bits, and Hertzes in the file name are actually not
 important and the file name can be anything. `--test` argument doesn't need to be supplied if the folder contains a file
 called `test.wav`.
+
+Various graphs can be produced by providing `--plot` parameter to Impulcifer. These can be helpful in figuring out what
+went wrong if the produced HRIR doesn't sound right. Producing the plots will take some time so be patient.
+
+Sine sweep recordings are read from WAV files which have channel names separated with commas and `.wav` extension eg.
+`FL,FR.wav`. The individual speakers in the given file must recorded in the order of the speaker names in the file name.
+There can be multiple files if the recording was done with multiple steps as is the case when recording 7.1 setup with
+two speakers. In that case there should be `FL,FR.wav`, `SR,BR.wav`, `BL,SL.wav` and `FC.wav` files in the folder.
 
 Impulcifer will compensate for the headphone frequency response using headphone sine sweep recording if the folder
 contains file called `headphones.wav`. If you have the file but would like not to have headphone compensation, you can
 simply rename the file for example as `headphones.wav.bak` and run the command again.
 
-Various graphs can be produced by providing `--plot` parameter to Impulcifer. These can be helpful in figuring out what
-went wrong if the produced HRIR doesn't sound right. Producing the plots will take some time so be patient.
+Headphone equalization can be baked into the produced HRIR file by having a file called `eq.wav` in the folder. The eq 
+file must be a WAV file containing one or two FIR filter tracks. When there are two tracks in the file the first track
+is used for left side of the headphone and the second for the right side of the headphone. With a single track the both
+sides use the same equalization. Headphone equalization is useful for in-ear monitors because it's not possible to do
+headphone compensation with IEMs. When using IEMS you still need an around ear headphone for the headphone compensation.
+
+The way to do this is to create an equalization FIR filter which makes the IEM sound like the around ear headphone and
+saving this FIR filter into the folder as `eq.wav`. Impulcifer will then bake the frequency response transformation
+into the HRIR and you can enjoy speaker sound with your IEMs. You can generate this filter with
+[AutoEQ](https://github.com/jaakkopasanen/AutoEq), see usage instructions for
+[using sound signatures](https://github.com/jaakkopasanen/AutoEq#using-sound-signatures) to learn how to transfer one
+headphone into another.
 
 ## Contact
 [Issues](https://github.com/jaakkopasanen/AutoEq/issues) are the way to go if you are experiencing problems, have
