@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 from scipy import signal
+import nnresample
 from autoeq.frequency_response import FrequencyResponse
 from utils import magnitude_response
 
@@ -89,6 +90,22 @@ class ImpulseResponse:
         tail_ind = int(np.round(tail_ind))
         return tail_ind
 
+    def equalize(self, fir):
+        """Equalizes this impulse response with give FIR filter.
+
+        Args:
+            fir: FIR filter as an single dimensional array
+
+        Returns:
+            None
+        """
+        self.data = signal.convolve(self.data, fir, mode='full')
+
+    def resample(self, fs):
+        """Resamples this impulse response to the given sampling rate."""
+        self.data = nnresample.resample(self.data, fs, self.fs)
+        self.fs = fs
+
     def plot_spectrogram(self, fig=None, ax=None, plot_file_path=None):
         """Plots spectrogram for a logarithmic sine sweep recording.
 
@@ -168,6 +185,7 @@ class ImpulseResponse:
         return fig, ax
 
     def magnitude_response(self):
+        """Calculates magnitude response for the data."""
         return magnitude_response(self.data, self.fs)
 
     def plot_fr(self, fig=None, ax=None, plot_file_path=None, raw=True, smoothed=True):

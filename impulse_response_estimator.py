@@ -39,8 +39,6 @@ class ImpulseResponseEstimator(object):
         # Generate inverse filter
         self.inverse_filter = self.generate_inverse_filter()
 
-        #self.plot()
-
     def __len__(self):
         return len(self.test_signal)
 

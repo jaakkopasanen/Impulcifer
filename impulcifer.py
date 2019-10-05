@@ -5,7 +5,6 @@ import re
 import numpy as np
 import matplotlib.pyplot as plt
 import argparse
-from scipy.signal import convolve
 from autoeq.frequency_response import FrequencyResponse
 from impulse_response_estimator import ImpulseResponseEstimator
 from hrir import HRIR
@@ -16,6 +15,7 @@ from constants import SPEAKER_NAMES
 
 def main(dir_path=None,
          test_signal=None,
+         fs=None,
          plot=False):
     """"""
     if dir_path is None or not os.path.isdir(dir_path):
@@ -48,7 +48,7 @@ def main(dir_path=None,
 
     if plot:
         # Plot
-        os.makedirs(os.path.join(dir_path, 'plots'))
+        os.makedirs(os.path.join(dir_path, 'plots'), exist_ok=True)
         hrir.plot(dir_path=os.path.join(dir_path, 'plots'))
 
     # Crop noise and harmonics from the beginning
@@ -63,7 +63,7 @@ def main(dir_path=None,
         hp_irs.open_recording(headphones, speakers=['FL', 'FR'])
         hp_irs = [hp_irs.irs['FL']['left'], hp_irs.irs['FR']['right']]
 
-        eq_irs = []
+        firs = []
         biases = []
         frs = []
         for i, ir in enumerate(hp_irs):
@@ -95,7 +95,7 @@ def main(dir_path=None,
             frs.append(fr)
             # Create miniumum phase FIR filter
             eq_ir = fr.minimum_phase_impulse_response(fs=estimator.fs, f_res=10)
-            eq_irs.append(ImpulseResponse(eq_ir, estimator.fs))
+            firs.append(ImpulseResponse(eq_ir, estimator.fs))
             # Calculate bias
             avg = np.mean(fr.equalized_raw[np.logical_and(fr.frequency >= 100, fr.frequency <= 10000)])
             biases.append(avg)
@@ -105,19 +105,19 @@ def main(dir_path=None,
         # Levels might be different due to measurement devices or microphone placement
         if biases[0] > biases[1]:
             # Left headphone measurement is louder, bring it down to level of right headphone
-            eq_irs[0].data *= 10 ** ((biases[1] - biases[0]) / 20)
+            firs[0].data *= 10 ** ((biases[1] - biases[0]) / 20)
             frs[0].equalization += biases[1] - biases[0]
             frs[0].equalized_raw += biases[1] - biases[0]
         else:
             # Right headphone measurement is louder, bring it down to level of left headphone
-            eq_irs[1].data *= 10 ** ((biases[0] - biases[1]) / 20)
+            firs[1].data *= 10 ** ((biases[0] - biases[1]) / 20)
             frs[1].equalization += biases[0] - biases[1]
             frs[1].equalized_raw += biases[0] - biases[1]
 
         if plot:
             # Headphone plots
             plots = {'left': {'fr': None, 'ir': None}, 'right': {'fr': None, 'ir': None}}
-            for ir, fr, side in zip(eq_irs, frs, ['left', 'right']):
+            for ir, fr, side in zip(firs, frs, ['left', 'right']):
                 fig, ax = plt.subplots(1, 2)
                 fig.set_size_inches(15, 7)
                 fr.plot_graph(fig=fig, ax=ax[0], show=False)
@@ -138,22 +138,16 @@ def main(dir_path=None,
                 plt.close(fig)
 
         # Equalize HRIR with headphone compensation FIR filters
-        for speaker, pair in hrir.irs.items():
-            for side, ir in pair.items():
-                eq_ir = eq_irs[0] if side == 'left' else eq_irs[1]
-                hrir.irs[speaker][side].data = convolve(ir.data, eq_ir.data, mode='full')
+        hrir.equalize(firs)
 
     # Apply given equalization filter
     if os.path.isfile(eq):
-        fs, fir = read_wav(eq)
-        if len(fir.shape) == 1 or fir.shape[0] == 1:
-            # Single track in the WAV file, use it for both channels
-            fir = np.tile(fir, (2, 1))
-        # Equalize each impulse response in the HRIR with eq FIR filter
-        for speaker, pair in hrir.irs.items():
-            for side, ir in pair.items():
-                eq_ir = fir[0, :] if side == 'left' else fir[1, :]
-                hrir.irs[speaker][side].data = convolve(ir.data, eq_ir, mode='full')
+        fs, firs = read_wav(eq)
+        hrir.equalize(firs)
+
+    # Resample
+    if fs is not None and fs != hrir.fs:
+        hrir.resample(fs)
 
     # Normalize gain
     hrir.normalize(target_db=0)
@@ -173,6 +167,7 @@ def create_cli():
     arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument('--dir_path', type=str, help='Path to directory for recordings and outputs.')
     arg_parser.add_argument('--test_signal', type=str, help='Path to sine sweep test signal.')
+    arg_parser.add_argument('--fs', type=int, help='Output sampling rate in Hertz.')
     arg_parser.add_argument('--plot', action='store_true', help='Plot graphs for debugging.')
     args = vars(arg_parser.parse_args())
     if 'speakers' in args and args['speakers'] is not None:
