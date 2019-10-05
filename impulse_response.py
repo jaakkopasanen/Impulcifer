@@ -15,6 +15,18 @@ class ImpulseResponse:
         self.data = data
         self.recording = recording
 
+    def __len__(self):
+        """Impulse response length in samples."""
+        return len(self.data)
+
+    def duration(self):
+        """Impulse response duration in seconds."""
+        return len(self) / self.fs
+
+    def active_duration(self):
+        """Impulse response duration from peak to noise in seconds."""
+        return (self.tail_index() - self.peak_index()) / self.fs
+
     def peak_index(self, start=0, end=None, peak_height=0.67):
         """Finds the first high (negative or positive) peak in the impulse response wave form.
 
@@ -105,6 +117,15 @@ class ImpulseResponse:
         """Resamples this impulse response to the given sampling rate."""
         self.data = nnresample.resample(self.data, fs, self.fs)
         self.fs = fs
+
+    def pnr(self):
+        """Calculates peak to noise ratio"""
+        data = self.data / np.max(np.abs(self.data))  # Normalize to 0 dB
+        tail_index = self.tail_index()  # Index where IR decays to noise floor
+        # Select one second after the IR decays to noise floor as noise sample
+        tail = data[tail_index:tail_index + self.fs]
+        # 0 dB over mean squares
+        return 10 * np.log10(1 / (1 / len(tail) * np.sum(tail ** 2)))
 
     def plot_spectrogram(self, fig=None, ax=None, plot_file_path=None):
         """Plots spectrogram for a logarithmic sine sweep recording.

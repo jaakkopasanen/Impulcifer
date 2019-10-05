@@ -5,6 +5,8 @@ import re
 import numpy as np
 import matplotlib.pyplot as plt
 import argparse
+from tabulate import tabulate
+from datetime import datetime
 from autoeq.frequency_response import FrequencyResponse
 from impulse_response_estimator import ImpulseResponseEstimator
 from hrir import HRIR
@@ -45,6 +47,9 @@ def main(dir_path=None,
 
     # Write multi-channel WAV file with sine sweeps for debugging
     hrir.write_wav(os.path.join(dir_path, 'responses.wav'))
+
+    # Write info and stats in readme
+    write_readme(os.path.join(dir_path, 'README.md'), hrir, fs)
 
     if plot:
         # Plot
@@ -161,6 +166,55 @@ def main(dir_path=None,
         track_order=['FL-left', 'FL-right', 'SL-left', 'SL-right', 'BL-left', 'BL-right', 'FC-left', 'FR-right',
                      'FR-left', 'SR-right', 'SR-left', 'BR-right', 'BR-left', 'FC-right']
     )
+
+
+def write_readme(file_path, hrir, fs):
+    """Writes info and stats to readme file.
+
+    Args:
+        file_path: Path to readme file
+        hrir: HRIR instance
+        fs: Output sampling rate
+
+    Returns:
+        Readme string
+    """
+    if fs is None:
+        fs = hrir.fs
+
+    table = []
+    for speaker in SPEAKER_NAMES:
+        pair = hrir.irs[speaker]
+        itd = np.abs(pair['right'].peak_index() - pair['left'].peak_index()) / hrir.fs * 1e6
+        for side, ir in pair.items():
+            # Zero for the first ear
+            _itd = itd if side == 'left' and speaker[1] == 'R' or side == 'right' and speaker[1] == 'L' else 0.0
+            table.append([
+                speaker,
+                side,
+                f'{ir.pnr():.1f} dB',
+                f'{_itd:.1f} us',
+                f'{ir.active_duration() * 1000:.1f} ms'
+            ])
+    table_str = tabulate(
+        table,
+        headers=['Speaker', 'Side', 'PNR', 'ITD', 'Length'],
+        tablefmt='github'
+    )
+    s = f'''# HRIR
+
+    **Date:** {datetime.now().strftime('%Y-%m-%d %H:%M')}  
+    **Input sampling rate:** {hrir.fs} Hz  
+    **Output sampling rate:** {fs} Hz  
+
+    {table_str}
+    '''
+    s = re.sub('\n[ \t]+', '\n', s).strip()
+
+    with open(file_path, 'w') as f:
+        f.write(s)
+
+    return s
 
 
 def create_cli():
