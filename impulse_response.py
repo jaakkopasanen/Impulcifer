@@ -215,6 +215,7 @@ class ImpulseResponse:
         ax.set_ylim([None, 10])
         ax.set_xlim([0, len(self) / self.fs * 1000])
         ax.set_xlabel('Time (ms)')
+        ax.set_ylabel('Amplitude (dBr)')
         ax.grid(True, which='major')
         ax.set_title('Decay')
         if plot_file_path:
