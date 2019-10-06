@@ -127,7 +127,7 @@ def main(dir_path=None,
                 fig.set_size_inches(15, 7)
                 fr.plot_graph(fig=fig, ax=ax[0], show=False)
                 ir.plot_ir(fig=fig, ax=ax[1], end=2e-3)
-                plt.suptitle(f'Headphones {side}')
+                fig.suptitle(f'Headphones {side}')
                 plots[side]['fig'] = fig
                 plots[side]['fr'] = ax[0]
                 plots[side]['ir'] = ax[1]
@@ -183,7 +183,8 @@ def write_readme(file_path, hrir, fs):
         fs = hrir.fs
 
     table = []
-    for speaker in SPEAKER_NAMES:
+    speaker_names = sorted(hrir.irs.keys(), key=lambda x: SPEAKER_NAMES.index(x))
+    for speaker in speaker_names:
         pair = hrir.irs[speaker]
         itd = np.abs(pair['right'].peak_index() - pair['left'].peak_index()) / hrir.fs * 1e6
         for side, ir in pair.items():

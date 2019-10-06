@@ -1,8 +1,11 @@
 # -*- coding: utf-8 -*-
 
+from time import time
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
+from matplotlib.mlab import specgram
+from matplotlib import cm
 from scipy import signal
 import nnresample
 from autoeq.frequency_response import FrequencyResponse
@@ -53,27 +56,31 @@ class ImpulseResponse:
         # Return the first one
         return np.min(peaks)
 
-    def decay(self, window_size_ms=1.0):
+    def decay(self):
         """Decay graph with RMS values for each window.
-
-        Args:
-            window_size_ms: RMS window size in milliseconds.
 
         Returns:
             RMS widows as Numpy array
         """
-        # Sliding window RMS
-        window_size = round(self.fs // 1000 * window_size_ms)
+        # Envelope
+        analytical_signal = self.data
+        amplitude_envelope = np.abs(analytical_signal)
+        # dB scale and normalized to 0 dB
+        amplitude_envelope /= np.max(amplitude_envelope)
+        decay = amplitude_envelope
 
-        # RMS windows
-        n = len(self.data) // window_size
-        windows = np.vstack(np.split(self.data[:n * window_size], n))
-        rms = np.sqrt(np.mean(np.square(windows), axis=1))
+        inds, _ = signal.find_peaks(decay)
+        heights = decay[inds]
+        n = int(len(inds) / self.duration() * 0.05)  # Arbitrary 0.05 to scale the peak selection window size
+        top = inds[0]  # Index of top value in peak indexes
+        tops = [top]
+        while top + 1 < len(heights):
+            top = np.argmax(heights[top + 1:top + 1 + n]) + top + 1
+            tops.append(top)
+        skyline = inds[tops]  # Indexes to decay
 
-        # Prevent division by zero in log10
-        rms[rms == 0.0] = 1e-9
-
-        return 20 * np.log10(rms)
+        decay = decay[skyline]
+        return skyline, decay
 
     def tail_index(self):
         """Finds index after which there is nothing but noise.
@@ -82,25 +89,21 @@ class ImpulseResponse:
             Index to impulse response data
         """
         # Generate decay data
-        window_size_ms = 10
-        rms = self.decay(window_size_ms=window_size_ms)
+        inds, decay = self.decay()
 
-        # Smoothen data
-        rms = signal.savgol_filter(rms, 21, 1)
-        rms_peak_index = np.argmax(rms)
+        # Find starting point
+        peak_index = np.argmax(decay)
 
-        # Find index where current RMS window value is greater than the previous indicating that noise floor has been
+        # Find index where current value is greater than the previous indicating that noise floor has been
         # reached
-        i = rms_peak_index + 1
-        while i < len(rms):
-            if rms[i] > rms[i - 1] - 0.1:  # 0.1dB threshold for improvement
+        i = peak_index + 1
+        while i < len(decay):
+            if decay[i] > decay[i - 1]:  # 0.1dB threshold for improvement
                 break
             i += 1
 
         # Tail index in impulse response, rms has larger window size
-        tail_ind = i * window_size_ms * (self.fs / 1000)
-        tail_ind = int(np.round(tail_ind))
-        return tail_ind
+        return inds[i]
 
     def equalize(self, fir):
         """Equalizes this impulse response with give FIR filter.
@@ -127,13 +130,15 @@ class ImpulseResponse:
         # 0 dB over mean squares
         return 10 * np.log10(1 / (1 / len(tail) * np.sum(tail ** 2)))
 
-    def plot_spectrogram(self, fig=None, ax=None, plot_file_path=None):
+    def plot_spectrogram(self, fig=None, ax=None, plot_file_path=None, f_res=10, n_segments=200):
         """Plots spectrogram for a logarithmic sine sweep recording.
 
         Args:
             fig: Figure instance
             ax: Axis instance
             plot_file_path: Path to a file for saving the plot
+            f_res: Frequency resolution (step) in Hertz
+            n_segments: Number of segments in time axis
 
         Returns:
             None
@@ -142,19 +147,39 @@ class ImpulseResponse:
             return
         if fig is None:
             fig, ax = plt.subplots()
-        ax.specgram(self.recording, Fs=self.fs)
+
+        # Window length in samples
+        nfft = int(self.fs / f_res)
+        # Overlapping in samples
+        noverlap = int(nfft - (len(self.recording) - nfft) / n_segments)
+        # Get spectrogram data
+        spectrum, freqs, t = specgram(self.recording, Fs=self.fs, NFFT=nfft, noverlap=noverlap, mode='psd')
+
+        # Remove zero frequency
+        f = freqs[1:]
+        z = spectrum[1:, :]
+        # Logarithmic power
+        z = 10 * np.log10(z)
+
+        # Create spectrogram image
+        t, f = np.meshgrid(t, f)
+        cs = plt.pcolormesh(t, f, z, cmap=cm.gnuplot2)
+        fig.colorbar(cs)
+        ax.semilogy()
         ax.set_xlabel('Time (s)')
         ax.set_ylabel('Frequency (Hz)')
         ax.set_title('Spectrogram')
+
+        # Save image
         if plot_file_path:
             fig.savefig(plot_file_path)
+
         return fig, ax
 
-    def plot_decay(self, window_size_ms=1, fig=None, ax=None, plot_file_path=None):
+    def plot_decay(self, fig=None, ax=None, plot_file_path=None):
         """Plots decay graph.
 
         Args:
-            window_size_ms: RMS window size in milliseconds.
             fig: Figure instance. New will be created if None is passed.
             ax: Axis instance. New will be created if None is passed to fig.
             plot_file_path: Save plot figure to a file.
@@ -162,12 +187,13 @@ class ImpulseResponse:
         Returns:
             None
         """
-        rms = self.decay(window_size_ms=window_size_ms)
         if fig is None:
             fig, ax = plt.subplots()
-        ax.plot(window_size_ms * np.arange(len(rms)), rms, linewidth=0.5)
-        ax.set_ylim([-150, 0])
-        ax.set_xlim([-100, len(rms) * window_size_ms])
+        t, decay = self.decay()
+        ax.plot(t / self.fs * 1000, 20 * np.log10(decay), linewidth=1)
+
+        ax.set_ylim([None, 10])
+        ax.set_xlim([0, len(self) / self.fs * 1000])
         ax.set_xlabel('Time (ms)')
         ax.grid(True, which='major')
         ax.set_title('Decay')
@@ -196,7 +222,7 @@ class ImpulseResponse:
             fig, ax = plt.subplots()
         ax.plot(np.arange(start * 1000, start * 1000 + 1000 / self.fs * len(ir), 1000 / self.fs), ir, linewidth=0.5)
         ax.set_xlabel('Time (ms)')
-        ax.set_ylabel('Frequency (Hz)')
+        ax.set_ylabel('Amplitude')
         ax.grid(True)
         ax.set_title('Impulse response'.format(ms=int(end * 1000)))
 

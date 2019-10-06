@@ -3,6 +3,7 @@
 import os
 import numpy as np
 import soundfile as sf
+from scipy.fftpack import fft
 
 
 def read_wav(file_path):
@@ -51,10 +52,11 @@ def magnitude_response(x, fs):
         - **f:** Frequencies
         - **X:** Magnitudes
     """
-    nfft = len(x)
+    _x = x
+    nfft = len(_x)
     df = fs / nfft
     f = np.arange(0, fs - df, df)
-    X = np.fft.fft(x)
+    X = fft(_x)
     X_mag = 20 * np.log10(np.abs(X))
     return f[0:int(np.ceil(nfft/2))], X_mag[0:int(np.ceil(nfft/2))]
 
