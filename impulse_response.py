@@ -60,7 +60,8 @@ class ImpulseResponse:
         """Decay graph with RMS values for each window.
 
         Returns:
-            RMS widows as Numpy array
+            - Indexes to decay data
+            - Values of decay data
         """
         # Envelope
         analytical_signal = self.data
@@ -129,6 +130,25 @@ class ImpulseResponse:
         tail = data[tail_index:tail_index + self.fs]
         # 0 dB over mean squares
         return 10 * np.log10(1 / (1 / len(tail) * np.sum(tail ** 2)))
+
+    def reverberation_time(self, target_level=-60):
+        """Calculates reverberation time until a given attenuation level has been reached.
+
+        Args:
+            target_level: Target attenuation level in dB
+
+        Returns:
+            Reverberation time in seconds
+        """
+        inds, decay = self.decay()
+        decay = 20 * np.log10(decay)
+        peak_ind = np.argmax(decay)
+        tail_ind = self.tail_index()
+        for i in range(peak_ind, len(decay)):
+            if decay[i] < target_level:
+                return (inds[i] - inds[peak_ind]) / self.fs
+            if inds[i] / self.fs > tail_ind:
+                return (tail_ind - inds[peak_ind]) / self.fs
 
     def plot_spectrogram(self, fig=None, ax=None, plot_file_path=None, f_res=10, n_segments=200):
         """Plots spectrogram for a logarithmic sine sweep recording.

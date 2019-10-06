@@ -195,11 +195,12 @@ def write_readme(file_path, hrir, fs):
                 side,
                 f'{ir.pnr():.1f} dB',
                 f'{_itd:.1f} us',
-                f'{ir.active_duration() * 1000:.1f} ms'
+                f'{ir.active_duration() * 1000:.1f} ms',
+                f'{ir.reverberation_time(target_level=-60) * 1000:.1f} ms'
             ])
     table_str = tabulate(
         table,
-        headers=['Speaker', 'Side', 'PNR', 'ITD', 'Length'],
+        headers=['Speaker', 'Side', 'PNR', 'ITD', 'Length', 'RT60'],
         tablefmt='github'
     )
     s = f'''# HRIR
