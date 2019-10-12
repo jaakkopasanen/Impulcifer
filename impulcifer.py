@@ -31,7 +31,12 @@ def main(dir_path=None,
     eq = os.path.join(dir_path, 'eq.wav')
 
     # Read files
-    estimator = ImpulseResponseEstimator.from_wav(test_signal)
+    if re.match('^.+\.wav$', test_signal, flags=re.IGNORECASE):
+        estimator = ImpulseResponseEstimator.from_wav(test_signal)
+    elif re.match('^.+\.pkl$', test_signal, flags=re.IGNORECASE):
+        estimator = ImpulseResponseEstimator.from_pickle(test_signal)
+    else:
+        raise TypeError(f'Unknown file extension for test signal "{test_signal}"')
     hrir = HRIR(estimator)
 
     # Files must be of pattern FL,FR,BR.wav
@@ -62,88 +67,10 @@ def main(dir_path=None,
     # Crop noise from the tail
     hrir.crop_tails()
 
+    # Compensate headphones
     if os.path.isfile(headphones):
-        # Read WAV file
-        hp_irs = HRIR(estimator)
-        hp_irs.open_recording(headphones, speakers=['FL', 'FR'])
-        hp_irs = [hp_irs.irs['FL']['left'], hp_irs.irs['FR']['right']]
-
-        firs = []
-        biases = []
-        frs = []
-        for i, ir in enumerate(hp_irs):
-            # Calculate magnitude response
-            f, m = ir.magnitude_response()
-            # Create frequency response
-            name = 'Left' if i == 0 else 'Right'
-            fr = FrequencyResponse(name=name, frequency=f[1:], raw=m[1:])
-            fr.interpolate()
-
-            # Take copy of the frequency response and
-            fr_eq = fr.copy()
-            # Centering removes bias and we want the bias to stay in the original
-            fr_eq.center()
-            # Aiming for flat response at the ear canal
-            fr_eq.compensate(
-                FrequencyResponse(name='zero', frequency=fr.frequency, raw=np.zeros(len(fr.frequency))),
-                min_mean_error=False
-            )
-            # Smoothen
-            fr_eq.smoothen_heavy_light()
-            # Equalize to flat
-            fr_eq.equalize(max_gain=15, treble_f_lower=20000, treble_f_upper=23000, treble_gain_k=1)
-
-            # Copy equalization curve
-            fr.equalization = fr_eq.equalization.copy()
-            # Calculate equalized raw data
-            fr.equalized_raw = fr.raw + fr.equalization
-            frs.append(fr)
-            # Create miniumum phase FIR filter
-            eq_ir = fr.minimum_phase_impulse_response(fs=estimator.fs, f_res=10)
-            firs.append(ImpulseResponse(eq_ir, estimator.fs))
-            # Calculate bias
-            avg = np.mean(fr.equalized_raw[np.logical_and(fr.frequency >= 100, fr.frequency <= 10000)])
-            biases.append(avg)
-
-        # Balance equalization filters for left and right ear
-        # Both ears need to have same level
-        # Levels might be different due to measurement devices or microphone placement
-        if biases[0] > biases[1]:
-            # Left headphone measurement is louder, bring it down to level of right headphone
-            firs[0].data *= 10 ** ((biases[1] - biases[0]) / 20)
-            frs[0].equalization += biases[1] - biases[0]
-            frs[0].equalized_raw += biases[1] - biases[0]
-        else:
-            # Right headphone measurement is louder, bring it down to level of left headphone
-            firs[1].data *= 10 ** ((biases[0] - biases[1]) / 20)
-            frs[1].equalization += biases[0] - biases[1]
-            frs[1].equalized_raw += biases[0] - biases[1]
-
-        if plot:
-            # Headphone plots
-            plots = {'left': {'fr': None, 'ir': None}, 'right': {'fr': None, 'ir': None}}
-            for ir, fr, side in zip(firs, frs, ['left', 'right']):
-                fig, ax = plt.subplots(1, 2)
-                fig.set_size_inches(15, 7)
-                fr.plot_graph(fig=fig, ax=ax[0], show=False)
-                ir.plot_ir(fig=fig, ax=ax[1], end=2e-3)
-                fig.suptitle(f'Headphones {side}')
-                plots[side]['fig'] = fig
-                plots[side]['fr'] = ax[0]
-                plots[side]['ir'] = ax[1]
-
-            # Sync axes
-            sync_axes([plots['left']['fr'], plots['right']['fr']])
-            sync_axes([plots['left']['ir'], plots['right']['ir']])
-
-            # Save headphone plots
-            for side in ['left', 'right']:
-                fig = plots[side]['fig']
-                fig.savefig(os.path.join(dir_path, 'plots', f'Headphones {side}.png'))
-                plt.close(fig)
-
-        # Equalize HRIR with headphone compensation FIR filters
-        hrir.equalize(firs)
+        fig_path = os.path.join(dir_path, 'plots', f'Headphones.png') if plot else None
+        compensate_headphones(headphones, hrir, fig_path=fig_path)
 
     # Apply given equalization filter
     if os.path.isfile(eq):
@@ -166,6 +93,94 @@ def main(dir_path=None,
         track_order=['FL-left', 'FL-right', 'SL-left', 'SL-right', 'BL-left', 'BL-right', 'FC-left', 'FR-right',
                      'FR-left', 'SR-right', 'SR-left', 'BR-right', 'BR-left', 'FC-right']
     )
+
+
+def compensate_headphones(recording, hrir, fig_path=None):
+    """Equalizes HRIR tracks with headphone compensation measurement.
+
+    Args:
+        recording: File path to sine sweep recording made with headphones
+        hrir: HRIR instance for the speaker measurements
+        fig_path: File path for saving graphs
+
+    Returns:
+        None
+    """
+    t = time()
+    # Read WAV file
+    hp_irs = HRIR(hrir.estimator)
+    hp_irs.open_recording(recording, speakers=['FL', 'FR'])
+    hp_irs = [hp_irs.irs['FL']['left'], hp_irs.irs['FR']['right']]
+
+    firs = []
+    biases = []
+    frs = []
+    for i, ir in enumerate(hp_irs):
+        # Calculate magnitude response
+        f, m = ir.magnitude_response()
+        # Create frequency response
+        name = 'Left' if i == 0 else 'Right'
+        n = ir.fs / 2 / 4  # 4 Hz resolution
+        step = int(len(f) / n)
+        fr = FrequencyResponse(name=name, frequency=f[1::step], raw=m[1::step])
+        fr.interpolate()
+
+        # Take copy of the frequency response and
+        fr_eq = fr.copy()
+        # Centering removes bias and we want the bias to stay in the original
+        fr_eq.center()
+        # Aiming for flat response at the ear canal
+        fr_eq.compensate(
+            FrequencyResponse(name='zero', frequency=fr.frequency, raw=np.zeros(len(fr.frequency))),
+            min_mean_error=False
+        )
+        # Smoothen
+        fr_eq.smoothen_heavy_light()
+        # Equalize to flat
+        fr_eq.equalize(max_gain=15, treble_f_lower=20000, treble_f_upper=23000, treble_gain_k=1)
+
+        # Copy equalization curve
+        fr.equalization = fr_eq.equalization.copy()
+        # Calculate equalized raw data
+        fr.equalized_raw = fr.raw + fr.equalization
+        frs.append(fr)
+        # Create minimum phase FIR filter
+        eq_ir = fr.minimum_phase_impulse_response(fs=hrir.fs, f_res=10)
+        firs.append(ImpulseResponse(eq_ir, hrir.fs))
+        # Calculate bias
+        avg = np.mean(fr.equalized_raw[np.logical_and(fr.frequency >= 100, fr.frequency <= 10000)])
+        biases.append(avg)
+
+    # Balance equalization filters for left and right ear
+    # Both ears need to have same level
+    # Levels might be different due to measurement devices or microphone placement
+    if biases[0] > biases[1]:
+        # Left headphone measurement is louder, bring it down to level of right headphone
+        firs[0].data *= 10 ** ((biases[1] - biases[0]) / 20)
+        frs[0].equalization += biases[1] - biases[0]
+        frs[0].equalized_raw += biases[1] - biases[0]
+    else:
+        # Right headphone measurement is louder, bring it down to level of left headphone
+        firs[1].data *= 10 ** ((biases[0] - biases[1]) / 20)
+        frs[1].equalization += biases[0] - biases[1]
+        frs[1].equalized_raw += biases[0] - biases[1]
+
+    if fig_path is not None:
+        # Headphone plots
+        fig, ax = plt.subplots(1, 2)
+        fig.set_size_inches(15, 7)
+        fig.suptitle('Headphones')
+        for i, side in enumerate(['Left', 'Right']):
+            frs[i].plot_graph(fig=fig, ax=ax[i], show=False)
+            ax[i].set_title(side)
+        # Sync axes
+        sync_axes([ax[0], ax[1]])
+        # Save headphone plots
+        fig.savefig(fig_path)
+        plt.close(fig)
+
+    # Equalize HRIR with headphone compensation FIR filters
+    hrir.equalize(firs)
 
 
 def write_readme(file_path, hrir, fs):
@@ -222,7 +237,8 @@ def write_readme(file_path, hrir, fs):
 def create_cli():
     arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument('--dir_path', type=str, help='Path to directory for recordings and outputs.')
-    arg_parser.add_argument('--test_signal', type=str, help='Path to sine sweep test signal.')
+    arg_parser.add_argument('--test_signal', type=str,
+                            help='Path to sine sweep test signal or pickled impulse response estimator.')
     arg_parser.add_argument('--fs', type=int, help='Output sampling rate in Hertz.')
     arg_parser.add_argument('--plot', action='store_true', help='Plot graphs for debugging.')
     args = vars(arg_parser.parse_args())

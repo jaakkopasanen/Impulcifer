@@ -2,8 +2,10 @@
 
 import os
 from argparse import ArgumentParser
+import pickle
 from scipy.fftpack import fft
-from scipy.signal import fftconvolve, kaiser, hanning
+from scipy.signal import fftconvolve, kaiser
+from scipy.signal.windows import hann
 import numpy as np
 import matplotlib.pyplot as plt
 from utils import read_wav, write_wav, magnitude_response
@@ -122,7 +124,7 @@ class ImpulseResponseEstimator(object):
             fade_in = 2 * int(self.fs * seconds_per_octave * fade_in)
             if fade_in % 2:
                 fade_in += 1
-            fade_in_window = hanning(fade_in)[:fade_in // 2]
+            fade_in_window = hann(fade_in)[:fade_in // 2]
 
         # Fade-out window
         if fade_out is None:
@@ -131,7 +133,7 @@ class ImpulseResponseEstimator(object):
             fade_out = 2 * int(self.fs * seconds_per_octave * fade_out)
             if fade_out % 2:
                 fade_out += 1
-            fade_out_window = hanning(fade_out)[fade_out // 2:]
+            fade_out_window = hann(fade_out)[fade_out // 2:]
 
         # Create window from fade-in window and fade-out window with ones in the middle
         win = np.concatenate([
@@ -156,6 +158,17 @@ class ImpulseResponseEstimator(object):
             raise ValueError('Data read from WAV file does not match generated test signal. WAV file must be generated '
                              'with the current version of ImpulseResponseEstimator.')
         return ire
+
+    @staticmethod
+    def from_pickle(file_path):
+        """Creates ImpulseResponseEstimator instance from pickled file."""
+        with open(file_path, 'rb') as f:
+            return pickle.load(f)
+
+    def to_pickle(self, file_path):
+        """Saves self to pickled file."""
+        with open(file_path, 'wb') as f:
+            pickle.dump(self, f, protocol=pickle.HIGHEST_PROTOCOL)
 
 
 def main():
@@ -235,6 +248,9 @@ def main():
 
     # Write test signal to WAV file
     write_wav(file_path, ire.fs, ire.test_signal, bit_depth=bit_depth)
+
+    # Write to pickle file
+    ire.to_pickle(file_path.replace('.wav', '.pkl'))
 
     # Create test signal sequence
     data = np.zeros((n_tracks, int((ire.fs * 2.0 + len(ire)) * len(speakers) + ire.fs * 2.0)))

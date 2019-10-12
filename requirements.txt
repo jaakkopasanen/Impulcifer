@@ -1,7 +1,7 @@
-matplotlib
-scipy
-pyfftw
-soundfile
-sounddevice
-nnresample
-git+https://github.com/jaakkopasanen/autoeq-pkg
+matplotlib~=3.1.1
+scipy~=1.3.1
+pyfftw~=0.11.1
+soundfile~=0.10.2
+sounddevice~=0.3.14
+nnresample~=0.2.4
+git+https://github.com/jaakkopasanen/autoeq-pkg@1.0.0
