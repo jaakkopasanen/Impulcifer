@@ -52,7 +52,7 @@ virtualenv venv
 - Activate virtualenv.  
 ```bash
 # On Windows
-venv/Scripts/activate
+venv\Scripts\activate
 # On Mac and Linux
 source venv/bin/activate
 ```
@@ -69,7 +69,7 @@ When coming back at a later time you'll only need to activate virtual environmen
 ```bash
 cd Implucifer
 # On Windows
-venv/Scripts/activate
+venv\Scripts\activate
 # On Mac and Linux
 source venv/bin/activate
 ```

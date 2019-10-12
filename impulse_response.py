@@ -259,7 +259,9 @@ class ImpulseResponse:
     def plot_fr(self, fig=None, ax=None, plot_file_path=None, raw=True, smoothed=True):
         """Plots frequency response."""
         f, m = self.magnitude_response()
-        fr = FrequencyResponse(name='Frequency response', frequency=f[1:], raw=m[1:])
+        n = self.fs / 2 / 4  # 4 Hz resolution
+        step = int(len(f) / n)
+        fr = FrequencyResponse(name='Frequency response', frequency=f[1::step], raw=m[1::step])
         fr.interpolate()
         fr.smoothen_fractional_octave(
             window_size=1 / 3,
