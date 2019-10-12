@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 from matplotlib.mlab import specgram
 from matplotlib import cm
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 from scipy import signal
 import nnresample
 from autoeq.frequency_response import FrequencyResponse
@@ -161,7 +162,8 @@ class ImpulseResponse:
             n_segments: Number of segments in time axis
 
         Returns:
-            None
+            - Figure
+            - Axis
         """
         if self.recording is None or len(np.nonzero(self.recording)[0]) == 0:
             return
@@ -184,7 +186,11 @@ class ImpulseResponse:
         # Create spectrogram image
         t, f = np.meshgrid(t, f)
         cs = plt.pcolormesh(t, f, z, cmap=cm.gnuplot2)
-        fig.colorbar(cs)
+
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes('right', size='5%', pad=0.05)
+        fig.colorbar(cs, cax=cax)
+
         ax.semilogy()
         ax.set_xlabel('Time (s)')
         ax.set_ylabel('Frequency (Hz)')

@@ -106,7 +106,6 @@ def compensate_headphones(recording, hrir, fig_path=None):
     Returns:
         None
     """
-    t = time()
     # Read WAV file
     hp_irs = HRIR(hrir.estimator)
     hp_irs.open_recording(recording, speakers=['FL', 'FR'])
