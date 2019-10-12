@@ -1,13 +1,16 @@
 # -*- coding: utf-8 -*-
 
-from time import time
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 from matplotlib.mlab import specgram
-from matplotlib import cm
+from matplotlib.ticker import LinearLocator, FormatStrFormatter, FuncFormatter
+from mpl_toolkits.mplot3d import Axes3D  # noqa: F401 unused import
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from scipy import signal
+from scipy.interpolate import InterpolatedUnivariateSpline
+from scipy.signal.windows import hann
+from scipy.ndimage import uniform_filter
 import nnresample
 from autoeq.frequency_response import FrequencyResponse
 from utils import magnitude_response
@@ -151,6 +154,36 @@ class ImpulseResponse:
             if inds[i] / self.fs > tail_ind:
                 return (tail_ind - inds[peak_ind]) / self.fs
 
+    def plot_recording(self, fig=None, ax=None, plot_file_path=None):
+        """Plots recording wave form
+
+        Args:
+            fig: Figure instance
+            ax: Axes instance
+            plot_file_path: Path to a file for saving the plot
+
+        Returns:
+            - Figure
+            - Axes
+        """
+        if self.recording is None or len(np.nonzero(self.recording)[0]) == 0:
+            return
+        if fig is None:
+            fig, ax = plt.subplots()
+
+        ax.plot(np.linspace(0, len(self.recording) / self.fs, len(self.recording)), self.recording, linewidth=0.5)
+
+        ax.grid(True)
+        ax.set_xlabel('Time (s)')
+        ax.set_ylabel('Amplitude')
+        ax.set_title('Sine Sweep')
+
+        # Save image
+        if plot_file_path:
+            fig.savefig(plot_file_path)
+
+        return fig, ax
+
     def plot_spectrogram(self, fig=None, ax=None, plot_file_path=None, f_res=10, n_segments=200):
         """Plots spectrogram for a logarithmic sine sweep recording.
 
@@ -185,13 +218,14 @@ class ImpulseResponse:
 
         # Create spectrogram image
         t, f = np.meshgrid(t, f)
-        cs = plt.pcolormesh(t, f, z, cmap=cm.gnuplot2)
+        cs = ax.pcolormesh(t, f, z, cmap='gnuplot2')
 
         divider = make_axes_locatable(ax)
         cax = divider.append_axes('right', size='5%', pad=0.05)
         fig.colorbar(cs, cax=cax)
 
         ax.semilogy()
+        ax.yaxis.set_major_formatter(ticker.StrMethodFormatter('{x:.0f}'))
         ax.set_xlabel('Time (s)')
         ax.set_ylabel('Frequency (Hz)')
         ax.set_title('Spectrogram')
@@ -200,32 +234,6 @@ class ImpulseResponse:
         if plot_file_path:
             fig.savefig(plot_file_path)
 
-        return fig, ax
-
-    def plot_decay(self, fig=None, ax=None, plot_file_path=None):
-        """Plots decay graph.
-
-        Args:
-            fig: Figure instance. New will be created if None is passed.
-            ax: Axis instance. New will be created if None is passed to fig.
-            plot_file_path: Save plot figure to a file.
-
-        Returns:
-            None
-        """
-        if fig is None:
-            fig, ax = plt.subplots()
-        t, decay = self.decay()
-        ax.plot(t / self.fs * 1000, 20 * np.log10(decay), linewidth=1)
-
-        ax.set_ylim([None, 10])
-        ax.set_xlim([0, len(self) / self.fs * 1000])
-        ax.set_xlabel('Time (ms)')
-        ax.set_ylabel('Amplitude (dBr)')
-        ax.grid(True, which='major')
-        ax.set_title('Decay')
-        if plot_file_path:
-            fig.savefig(plot_file_path)
         return fig, ax
 
     def plot_ir(self, fig=None, ax=None, start=0.0, end=None, plot_file_path=None):
@@ -263,7 +271,19 @@ class ImpulseResponse:
         return magnitude_response(self.data, self.fs)
 
     def plot_fr(self, fig=None, ax=None, plot_file_path=None, raw=True, smoothed=True):
-        """Plots frequency response."""
+        """Plots frequency response
+
+        Args:
+            fig: Figure instance
+            ax: Axes instance
+            plot_file_path: Path to a file for saving the plot
+            raw: Include raw data?
+            smoothed: Include smoothed data?
+
+        Returns:
+            - Figure
+            - Axes
+        """
         f, m = self.magnitude_response()
         n = self.fs / 2 / 4  # 4 Hz resolution
         step = int(len(f) / n)
@@ -283,7 +303,7 @@ class ImpulseResponse:
         ax.set_xlabel('Frequency (Hz)')
         ax.semilogx()
         ax.set_xlim([20, 20e3])
-        ax.set_ylabel('Amplitude (dBr)')
+        ax.set_ylabel('Amplitude (dB)')
         ax.set_title(fr.name)
         ax.grid(True, which='major')
         ax.grid(True, which='minor')
@@ -298,4 +318,103 @@ class ImpulseResponse:
         ax.legend(legend, fontsize=8)
         if plot_file_path:
             fig.savefig(plot_file_path)
+        return fig, ax
+
+    def plot_decay(self, fig=None, ax=None, plot_file_path=None):
+        """Plots decay graph.
+
+        Args:
+            fig: Figure instance. New will be created if None is passed.
+            ax: Axis instance. New will be created if None is passed to fig.
+            plot_file_path: Save plot figure to a file.
+
+        Returns:
+            - Figure
+            - Axes
+        """
+        if fig is None:
+            fig, ax = plt.subplots()
+        t, decay = self.decay()
+        ax.plot(t / self.fs * 1000, 20 * np.log10(decay), linewidth=1)
+
+        ax.set_ylim([None, 10])
+        ax.set_xlim([0, len(self) / self.fs * 1000])
+        ax.set_xlabel('Time (ms)')
+        ax.set_ylabel('Amplitude (dBr)')
+        ax.grid(True, which='major')
+        ax.set_title('Decay')
+        if plot_file_path:
+            fig.savefig(plot_file_path)
+        return fig, ax
+
+    def plot_waterfall(self, fig=None, ax=None):
+        """"""
+        if fig is None:
+            fig, ax = plt.subplots()
+
+        # Window
+        nfft = int(self.fs * 0.3)  # 300 ms
+        noverlap = int(nfft * 0.9)  # 90% overlap
+        ascend_ms = 10  # 10 ms ascending window
+        ascend = int(ascend_ms / 1000 * self.fs)
+        plateu = int((nfft - ascend) * 3 / 4)  # 75%
+        descend = nfft - ascend - plateu  # 25%
+        window = np.concatenate([
+            hann(ascend * 2)[:ascend],
+            np.ones(plateu),
+            hann(descend * 2)[descend:]
+        ])
+
+        # Crop from 10ms before peak to start of tail
+        peak_ind = self.peak_index()
+        tail_ind = self.tail_index()
+        data = self.data[int(peak_ind - self.fs * 0.01):tail_ind + nfft]
+
+        # Get spectrogram data
+        spectrum, freqs, t = specgram(data, Fs=self.fs, NFFT=nfft, noverlap=noverlap, mode='psd', window=window)
+
+        # Remove 0 Hz component
+        spectrum = spectrum[1:, :]
+        freqs = freqs[1:]
+
+        # Interpolate to logaritmic frequency scale
+        f_max = self.fs / 2
+        f_min = 10
+        step = 1.1
+        f = np.array([f_min * step ** i for i in range(int(np.log(f_max / f_min) / np.log(step)))])
+        log_f_spec = np.ones((len(f), spectrum.shape[1]))
+        for i in range(spectrum.shape[1]):
+            interpolator = InterpolatedUnivariateSpline(np.log10(freqs), spectrum[:, i], k=1)
+            log_f_spec[:, i] = interpolator(np.log10(f))
+        z = log_f_spec
+        f = np.log10(f)
+
+        # Normalize and turn to dB scale
+        z /= np.max(z)
+        z = 10 * np.log10(z)
+
+        # Smoothen
+        z = uniform_filter(z, size=3, mode='constant')
+        t, f = np.meshgrid(t, f)
+
+        # Smoothing creates "walls", remove them
+        t = t[1:-1, :-1] * 1000  # Milliseconds
+        f = f[1:-1, :-1]
+        z = z[1:-1, :-1]
+
+        ax.plot_surface(t, f, z, cmap='magma', antialiased=True)
+
+        # Y (frequency) labels
+        ax.yaxis.set_major_formatter(FuncFormatter(lambda x, p: f'{10 ** x:.0f}'))
+
+        # Z labels
+        ax.zaxis.set_major_locator(LinearLocator(10))
+        ax.zaxis.set_major_formatter(FormatStrFormatter('%.02f'))
+
+        ax.set_xlabel('Time (ms)')
+        ax.set_ylabel('Frequency (Hz)')
+
+        # Orient
+        ax.view_init(30, 30)
+
         return fig, ax

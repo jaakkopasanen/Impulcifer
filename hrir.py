@@ -231,7 +231,14 @@ class HRIR:
                 ir.data = ir.data[:tail_ind]
                 ir.data *= np.concatenate([np.ones(len(ir.data) - len(window)), window])
 
-    def plot(self, dir_path=None, plot_ir=True, plot_fr=True, plot_decay=True, plot_spectrogram=True):
+    def plot(self,
+             dir_path=None,
+             plot_recording=True,
+             plot_ir=True,
+             plot_fr=True,
+             plot_decay=True,
+             plot_spectrogram=True,
+             plot_waterfall=True):
         """Plots all impulse responses."""
         def max_lims(_lims, _ax):
             if _lims['xlim'][0] is None or _ax.get_xlim()[0] < _lims['xlim'][0]:
@@ -244,48 +251,54 @@ class HRIR:
                 _lims['ylim'][1] = _ax.get_ylim()[1]
 
         # Plot and save max limits
-        lims = {name: {'xlim': [None, None], 'ylim': [None, None]} for name in ['ir', 'fr', 'decay']}
+        lims = {name: {'xlim': [None, None], 'ylim': [None, None]} for name in ['recording', 'ir', 'fr', 'decay']}
         plots = {name: {side: {'fig': None, 'ax': None} for side in ['left', 'right']} for name in self.irs.keys()}
         for speaker, pair in self.irs.items():
             for side, ir in pair.items():
                 # Create figure and axises for the plots
-                fig, ax = plt.subplots(2, 2)
-                fig.set_size_inches(15, 10)
+                fig = plt.figure()
+                ax = []
+                for i in range(5):
+                    ax.append(fig.add_subplot(2, 3, i + 1))
+                ax.append(fig.add_subplot(2, 3, 6, projection='3d'))
+                ax = np.vstack([ax[:3], ax[3:]])
+                fig.set_size_inches(22, 10)
                 fig.suptitle(f'{speaker}-{side}')
                 plots[speaker][side]['fig'] = fig
                 plots[speaker][side]['ax'] = ax
-                if plot_ir:
-                    # Impulse response
-                    peak = ir.peak_index() / self.fs
-                    ir.plot_ir(fig=fig, ax=ax[0, 0], start=peak - 0.01, end=peak + 0.09)
-                    max_lims(lims['ir'], ax[0, 0])
-                if plot_fr:
-                    # Frequency response
-                    ir.plot_fr(fig=fig, ax=ax[0, 1])
-                    max_lims(lims['fr'], ax[0, 1])
-                if plot_decay:
-                    # Decay graph
-                    ir.plot_decay(fig=fig, ax=ax[1, 0])
-                    max_lims(lims['decay'], ax[1, 0])
+                if plot_recording:
+                    ir.plot_recording(fig=fig, ax=ax[0, 0])
+                    max_lims(lims['recording'], ax[0, 0])
                 if plot_spectrogram:
-                    # Spectrogram
-                    ir.plot_spectrogram(fig=fig, ax=ax[1, 1])
+                    ir.plot_spectrogram(fig=fig, ax=ax[1, 0])
+                if plot_ir:
+                    peak = ir.peak_index() / self.fs
+                    ir.plot_ir(fig=fig, ax=ax[0, 1], start=peak - 0.01, end=peak + 0.09)
+                    max_lims(lims['ir'], ax[0, 1])
+                if plot_fr:
+                    ir.plot_fr(fig=fig, ax=ax[1, 1])
+                    max_lims(lims['fr'], ax[1, 1])
+                if plot_decay:
+                    ir.plot_decay(fig=fig, ax=ax[0, 2])
+                    max_lims(lims['decay'], ax[0, 2])
+                if plot_waterfall:
+                    ir.plot_waterfall(fig=fig, ax=ax[1, 2])
 
         # Synchronize axis limits for easier comparison
         for speaker, pair in self.irs.items():
             for side, ir in pair.items():
+                if plot_recording:
+                    plots[speaker][side]['ax'][0, 0].set_xlim(lims['recording']['xlim'])
+                    plots[speaker][side]['ax'][0, 0].set_ylim(lims['recording']['ylim'])
                 if plot_ir:
-                    # Impulse response
-                    plots[speaker][side]['ax'][0, 0].set_xlim(lims['ir']['xlim'])
-                    plots[speaker][side]['ax'][0, 0].set_ylim(lims['ir']['ylim'])
+                    plots[speaker][side]['ax'][0, 1].set_xlim(lims['ir']['xlim'])
+                    plots[speaker][side]['ax'][0, 1].set_ylim(lims['ir']['ylim'])
                 if plot_fr:
-                    # Frequency response
-                    plots[speaker][side]['ax'][0, 1].set_xlim(lims['fr']['xlim'])
-                    plots[speaker][side]['ax'][0, 1].set_ylim(lims['fr']['ylim'])
+                    plots[speaker][side]['ax'][1, 1].set_xlim(lims['fr']['xlim'])
+                    plots[speaker][side]['ax'][1, 1].set_ylim(lims['fr']['ylim'])
                 if plot_decay:
-                    # Decay graph
-                    plots[speaker][side]['ax'][1, 0].set_xlim(lims['decay']['xlim'])
-                    plots[speaker][side]['ax'][1, 0].set_ylim(lims['decay']['ylim'])
+                    plots[speaker][side]['ax'][0, 2].set_xlim(lims['decay']['xlim'])
+                    plots[speaker][side]['ax'][0, 2].set_ylim(lims['decay']['ylim'])
 
         # Show plots and write figures to files
         for speaker, pair in self.irs.items():
