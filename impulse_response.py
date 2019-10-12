@@ -371,7 +371,7 @@ class ImpulseResponse:
         data = self.data[int(peak_ind - self.fs * 0.01):tail_ind + nfft]
 
         # Get spectrogram data
-        spectrum, freqs, t = specgram(data, Fs=self.fs, NFFT=nfft, noverlap=noverlap, mode='psd', window=window)
+        spectrum, freqs, t = specgram(data, Fs=self.fs, NFFT=nfft, noverlap=noverlap, mode='magnitude', window=window)
 
         # Remove 0 Hz component
         spectrum = spectrum[1:, :]
@@ -391,7 +391,7 @@ class ImpulseResponse:
 
         # Normalize and turn to dB scale
         z /= np.max(z)
-        z = 10 * np.log10(z)
+        z = 20 * np.log10(z)
 
         # Smoothen
         z = uniform_filter(z, size=3, mode='constant')
