@@ -88,7 +88,7 @@ stereo speakers in multiple stages.
 
 You can try out what Impulcifer does by running:
 ```bash
-python impulcifer.py --dir_path=data/demo --test_signal=data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav
+python impulcifer.py --test_signal=data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.pkl --dir_path=data/demo 
 ```
 Impulcifer will now process the measurements and produce `hrir.wav` and `hesuvi.wav` which can be used with headphone
 speaker virtualization software such as [HeSuVi](https://sourceforge.net/projects/hesuvi/) to make headphones sound like
@@ -123,7 +123,7 @@ python recorder.py --play="data/sweep-seg-FL,FC,FR,SR,BR,BL,SL-7.1-6.15s-48000Hz
 ```
 - Process recordings  
 ```bash
-python impulcifer.py --test_signal="data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" --dir_path="data/my_hrir"
+python impulcifer.py --test_signal="data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.pkl" --dir_path="data/my_hrir"
 ```
 
 ### Stereo Speaker Setup
@@ -153,7 +153,7 @@ python recorder.py --play="data/sweep-seg-FR-stereo-6.15s-48000Hz-32bit-2.93Hz-2
 ```
 - Process recordings  
 ```bash
-python impulcifer.py --test_signal="data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" --dir_path="data/my_hrir" 
+python impulcifer.py --test_signal="data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.pkl" --dir_path="data/my_hrir" 
 ```
 
 ### Single Speaker
@@ -195,7 +195,7 @@ python recorder.py --play="data/sweep-seg-FL-stereo-6.15s-48000Hz-32bit-2.93Hz-2
 ```
 - Process recordings  
 ```bash
-python impulcifer.py --test_signal="data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" --dir_path="data/my_hrir"
+python impulcifer.py --test_signal="data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.pkl" --dir_path="data/my_hrir"
 ```
 
 ## Processing
@@ -205,7 +205,7 @@ a headphones recording and saved the recording files into `data/my_hrir` folder.
 Impulcifer folder and activate the virtual environment as described in the installation instructions if you don't have
 command prompt open yet. Sine sweep recordings are processed by running `impulcifer.py` with Python as shown below.
 ```bash
-python impulcifer.py --dir_path="data/my_hrir" --test_signal="data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" --plot
+python impulcifer.py --test_signal="data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.pkl" --dir_path="data/my_hrir" --plot
 ```
 
 You should have several WAV files and graphs in the folder. `hesuvi.wav` can now be used with HeSuVi to make your
@@ -214,14 +214,14 @@ headphones sound like speakers. Let's see what these arguments mean.
 `--dir_path=data/my_hrir` tells Impulcifer that the recordings can be found in a folder called `my_hrir` under `data`.
 Impulcifer will also write all the output files into this folder.
 
-`--test_signal=data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav` tells Impulcifer that the sine sweep signal is this
-WAV file. Impulcifer will load the file and construct inverse filter from the test signal and use that inverse filter
-to turn sine sweep recordings into impulse responses. Seconds, bits, and Hertzes in the file name are actually not
-important and the file name can be anything. `--test` argument doesn't need to be supplied if the folder contains a file
-called `test.wav`.
+`--test_signal=data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.pkl` tells Impulcifer that the inverse filter for
+deconvolution is this Pickle file. Alternative way is to provide a WAV file of the test signal and Impulcifer will
+load the file and construct inverse filter from the test signal. Inverse filter is used to turn sine sweep recordings
+into impulse responses. Seconds, bits, and Hertzes in the file name are actually not important and the file name can be
+anything. `--test` argument doesn't need to be supplied if the folder contains a file called `test.pkl` or `test.wav`.
 
 Various graphs can be produced by providing `--plot` parameter to Impulcifer. These can be helpful in figuring out what
-went wrong if the produced HRIR doesn't sound right. Producing the plots will take some time so be patient.
+went wrong if the produced HRIR doesn't sound right. Producing the plots will take some time.
 
 Sine sweep recordings are read from WAV files which have channel names separated with commas and `.wav` extension eg.
 `FL,FR.wav`. The individual speakers in the given file must recorded in the order of the speaker names in the file name.

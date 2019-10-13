@@ -25,8 +25,11 @@ def main(dir_path=None,
 
     # Paths
     dir_path = os.path.abspath(dir_path)
-    if not test_signal and os.path.isfile(os.path.join(dir_path, 'test.wav')):
-        test_signal = os.path.join(dir_path, 'test.wav')
+    if not test_signal:
+        if os.path.isfile(os.path.join(dir_path, 'test.pkl')):
+            test_signal = os.path.join(dir_path, 'test.pkl')
+        elif os.path.isfile(os.path.join(dir_path, 'test.wav')):
+            test_signal = os.path.join(dir_path, 'test.wav')
     headphones = os.path.join(dir_path, 'headphones.wav')
     eq = os.path.join(dir_path, 'eq.wav')
 
