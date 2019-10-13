@@ -338,7 +338,10 @@ class ImpulseResponse:
         ax.plot(t / self.fs * 1000, 20 * np.log10(decay), linewidth=1)
 
         ax.set_ylim([None, 10])
-        ax.set_xlim([0, len(self) / self.fs * 1000])
+        ax.set_xlim([
+            int(self.peak_index() / self.fs - 1) * 1000,
+            int(self.tail_index() / self.fs + 1) * 1000
+        ])
         ax.set_xlabel('Time (ms)')
         ax.set_ylabel('Amplitude (dBr)')
         ax.grid(True, which='major')

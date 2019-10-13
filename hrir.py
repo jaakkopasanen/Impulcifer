@@ -183,28 +183,6 @@ class HRIR:
                 pair['right'].data = pair['right'].data[peak_right - delay:]
                 pair['left'].data = pair['left'].data[peak_right - delay:]
 
-            # peak_left = pair['left'].peak_index()
-            # peak_right = pair['right'].peak_index()
-            # window_start = max(0, min(peak_left, peak_right) - 50)
-            # window_end = min(len(pair['left'].data), max(peak_left, peak_right) + 50)
-            # plt.plot(
-            #     np.arange(window_start, window_end)/self.fs*1000,
-            #     pair['left'].data[window_start:window_end],
-            #     color='#2f29ce'
-            # )
-            # plt.plot(
-            #     np.arange(window_start, window_end)/self.fs*1000,
-            #     pair['right'].data[window_start:window_end],
-            #     color='#e5312f'
-            # )
-            # plt.plot(peak_left/self.fs*1000, pair['left'].data[peak_left], 'o', color='black')
-            # plt.plot(peak_right/self.fs*1000, pair['right'].data[peak_right], 'o', color='black')
-            # plt.legend(['Left', 'Right'])
-            # plt.suptitle(speaker)
-            # plt.title(f'ITD = {(peak_right - peak_left)/self.fs*1000:.4f}ms')
-            # plt.grid()
-            # plt.show()
-
             # Make sure impulse response starts from silence
             window = signal.hanning(head * 2)[:head]
             pair['left'].data[:head] *= window
@@ -310,6 +288,24 @@ class HRIR:
                     im = Image.open(file_path)
                     im = im.convert('P', palette=Image.ADAPTIVE, colors=60)
                     im.save(file_path, optimize=True)
+
+    def plot_result(self, dir_path):
+        """Plot left and right side results with all impulse responses stacked
+
+        Args:
+            dir_path: Path to directory for saving the figure
+
+        Returns:
+            None
+        """
+        stacks = [[], []]
+        for speaker, pair in self.irs.items():
+            for i, ir in enumerate(pair.values()):
+                stacks[i].append(ir.data)
+        for i, side in enumerate(['Left', 'Right']):
+            data = np.sum(np.vstack(stacks[i]), axis=0)
+            ir = ImpulseResponse(data, self.fs)
+            ir.plot_fr(plot_file_path=os.path.join(dir_path, f'{side}.png'))
 
     def equalize(self, fir):
         """Equalizes all impulse responses with given FIR filters.

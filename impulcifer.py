@@ -60,9 +60,9 @@ def main(dir_path=None,
     write_readme(os.path.join(dir_path, 'README.md'), hrir, fs)
 
     if plot:
-        # Plot
-        os.makedirs(os.path.join(dir_path, 'plots'), exist_ok=True)
-        hrir.plot(dir_path=os.path.join(dir_path, 'plots'))
+        # Plot graphs pre processing
+        os.makedirs(os.path.join(dir_path, 'plots', 'pre'), exist_ok=True)
+        hrir.plot(dir_path=os.path.join(dir_path, 'plots', 'pre'))
 
     # Crop noise and harmonics from the beginning
     hrir.crop_heads()
@@ -86,6 +86,10 @@ def main(dir_path=None,
 
     # Normalize gain
     hrir.normalize(target_db=0)
+
+    if plot:
+        # Plot results
+        hrir.plot_result(os.path.join(dir_path, 'plots'))
 
     # Write multi-channel WAV file with standard track order
     hrir.write_wav(os.path.join(dir_path, 'hrir.wav'))
