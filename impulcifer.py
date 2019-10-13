@@ -2,11 +2,11 @@
 
 import os
 import re
-import numpy as np
-import matplotlib.pyplot as plt
 import argparse
 from tabulate import tabulate
 from datetime import datetime
+import numpy as np
+import matplotlib.pyplot as plt
 from autoeq.frequency_response import FrequencyResponse
 from impulse_response_estimator import ImpulseResponseEstimator
 from hrir import HRIR

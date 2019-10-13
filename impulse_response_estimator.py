@@ -4,7 +4,7 @@ import os
 from argparse import ArgumentParser
 import pickle
 from scipy.fftpack import fft
-from scipy.signal import fftconvolve, kaiser
+from scipy.signal import convolve
 from scipy.signal.windows import hann
 import numpy as np
 import matplotlib.pyplot as plt
@@ -74,7 +74,7 @@ class ImpulseResponseEstimator(object):
 
         # Now we have to normalize energy of result of dot product.
         # This is "naive" method but it just works.
-        frp = fft(fftconvolve(inverse_filter, self.test_signal))
+        frp = fft(convolve(inverse_filter, self.test_signal, method='auto'))
         inverse_filter /= np.abs(frp[round(frp.shape[0]/4)])
 
         return inverse_filter
@@ -147,7 +147,7 @@ class ImpulseResponseEstimator(object):
 
     def estimate(self, recording):
         """Estimates impulse response"""
-        return fftconvolve(recording, self.inverse_filter, mode='same')
+        return convolve(recording, self.inverse_filter, mode='same', method='auto')
 
     @classmethod
     def from_wav(cls, file_path):
