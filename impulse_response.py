@@ -110,6 +110,10 @@ class ImpulseResponse:
         # Tail index in impulse response, rms has larger window size
         return inds[i]
 
+    def crop_head(self, head_ms=1):
+        """Crops away head."""
+        self.data = self.data[self.peak_index() - int(self.fs * head_ms / 1000):]
+
     def equalize(self, fir):
         """Equalizes this impulse response with give FIR filter.
 
@@ -270,25 +274,30 @@ class ImpulseResponse:
         """Calculates magnitude response for the data."""
         return magnitude_response(self.data, self.fs)
 
-    def plot_fr(self, fig=None, ax=None, plot_file_path=None, raw=True, smoothed=True):
+    def frequency_response(self):
+        """Creates FrequencyResponse instance."""
+        f, m = self.magnitude_response()
+        n = self.fs / 2 / 4  # 4 Hz resolution
+        step = int(len(f) / n)
+        fr = FrequencyResponse(name='Frequency response', frequency=f[1::step], raw=m[1::step])
+        fr.interpolate()
+        return fr
+
+    def plot_fr(self, fig=None, ax=None, plot_file_path=None, plot_raw=True, plot_smoothed=True):
         """Plots frequency response
 
         Args:
             fig: Figure instance
             ax: Axes instance
             plot_file_path: Path to a file for saving the plot
-            raw: Include raw data?
-            smoothed: Include smoothed data?
+            plot_raw: Include raw data?
+            plot_smoothed: Include smoothed data?
 
         Returns:
             - Figure
             - Axes
         """
-        f, m = self.magnitude_response()
-        n = self.fs / 2 / 4  # 4 Hz resolution
-        step = int(len(f) / n)
-        fr = FrequencyResponse(name='Frequency response', frequency=f[1::step], raw=m[1::step])
-        fr.interpolate()
+        fr = self.frequency_response()
         fr.smoothen_fractional_octave(
             window_size=1 / 3,
             iterations=1,
@@ -298,26 +307,7 @@ class ImpulseResponse:
             treble_f_upper=1000,
 
         )
-        if fig is None:
-            fig, ax = plt.subplots()
-        ax.set_xlabel('Frequency (Hz)')
-        ax.semilogx()
-        ax.set_xlim([20, 20e3])
-        ax.set_ylabel('Amplitude (dB)')
-        ax.set_title(fr.name)
-        ax.grid(True, which='major')
-        ax.grid(True, which='minor')
-        ax.xaxis.set_major_formatter(ticker.StrMethodFormatter('{x:.0f}'))
-        legend = []
-        if raw:
-            ax.plot(fr.frequency, fr.raw, linewidth=0.5)
-            legend.append('Raw')
-        if smoothed:
-            ax.plot(fr.frequency, fr.smoothed, linewidth=1)
-            legend.append('Smoothed')
-        ax.legend(legend, fontsize=8)
-        if plot_file_path:
-            fig.savefig(plot_file_path)
+        fig, ax = fr.plot_graph(fig=fig, ax=ax, file_path=plot_file_path, raw=plot_raw, smoothed=plot_smoothed)
         return fig, ax
 
     def plot_decay(self, fig=None, ax=None, plot_file_path=None):

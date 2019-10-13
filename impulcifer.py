@@ -12,11 +12,13 @@ from impulse_response_estimator import ImpulseResponseEstimator
 from hrir import HRIR
 from impulse_response import ImpulseResponse
 from utils import sync_axes, read_wav
-from constants import SPEAKER_NAMES
+from constants import SPEAKER_NAMES, SPEAKER_PATTERN, SPEAKER_LIST_PATTERN
 
 
 def main(dir_path=None,
          test_signal=None,
+         room_target=None,
+         room_mic_calibration=None,
          fs=None,
          plot=False):
     """"""
@@ -40,18 +42,17 @@ def main(dir_path=None,
         estimator = ImpulseResponseEstimator.from_pickle(test_signal)
     else:
         raise TypeError(f'Unknown file extension for test signal "{test_signal}"')
-    hrir = HRIR(estimator)
 
-    # Files must be of pattern FL,FR,BR.wav
-    speaker_pattern = f'({"|".join(SPEAKER_NAMES + ["X"])})'
-    pattern = r'^{speaker_pattern}+(,{speaker_pattern})*\.wav$'.format(speaker_pattern=speaker_pattern)
+    # HRIR measurements
+    hrir = HRIR(estimator)
+    pattern = r'^{pattern}\.wav$'.format(pattern=SPEAKER_PATTERN)  # FL,FR.wav
     for file_name in [f for f in os.listdir(dir_path) if re.match(pattern, f)]:
         # Read the speaker names from the file name into a list
-        speakers = file_name.replace('.wav', '').split(',')
+        speakers = re.search(SPEAKER_LIST_PATTERN, file_name)[0].split(',')
         # Form absolute path
-        file_name = os.path.join(dir_path, file_name)
+        file_path = os.path.join(dir_path, file_name)
         # Open the file and add tracks to HRIR
-        hrir.open_recording(file_name, speakers=speakers)
+        hrir.open_recording(file_path, speakers=speakers)
 
     # Write multi-channel WAV file with sine sweeps for debugging
     hrir.write_wav(os.path.join(dir_path, 'responses.wav'))
@@ -70,6 +71,16 @@ def main(dir_path=None,
     # Crop noise from the tail
     hrir.crop_tails()
 
+    # Room correction
+    rir = correct_room(
+        hrir,
+        dir_path=dir_path,
+        room_target=room_target,
+        room_mic_calibration=room_mic_calibration,
+        plot=plot
+    )
+    # TODO: Add room stats to README
+
     # Compensate headphones
     if os.path.isfile(headphones):
         fig_path = os.path.join(dir_path, 'plots', f'Headphones.png') if plot else None
@@ -77,10 +88,12 @@ def main(dir_path=None,
 
     # Apply given equalization filter
     if os.path.isfile(eq):
-        fs, firs = read_wav(eq)
+        eq_fs, firs = read_wav(eq)
+        if eq_fs != hrir.fs:
+            raise ValueError('Equalization FIR filter sampling rate must match HRIR sampling rate.')
         hrir.equalize(firs)
 
-    # Resample
+    # Re-sample
     if fs is not None and fs != hrir.fs:
         hrir.resample(fs)
 
@@ -88,6 +101,8 @@ def main(dir_path=None,
     hrir.normalize(target_db=0)
 
     if plot:
+        # Plot post processing
+        hrir.plot(os.path.join(dir_path, 'plots', 'post'))
         # Plot results
         hrir.plot_result(os.path.join(dir_path, 'plots'))
 
@@ -100,6 +115,110 @@ def main(dir_path=None,
         track_order=['FL-left', 'FL-right', 'SL-left', 'SL-right', 'BL-left', 'BL-right', 'FC-left', 'FR-right',
                      'FR-left', 'SR-right', 'SR-left', 'BR-right', 'BR-left', 'FC-right']
     )
+
+
+def correct_room(hrir, dir_path=None, room_target=None, room_mic_calibration=None, plot=False):
+    """Corrects room acoustics
+
+    Args:
+        hrir: HRIR
+        dir_path: Path to output directory
+        room_target: Path to room target response CSV file
+        room_mic_calibration: Path to room measurement microphone calibration file. AutoEQ CSV files and MiniDSP'
+                              txt files are  supported.
+        plot: Plot graphs?
+
+    Returns:
+        Room Impulse Responses as HRIR or None
+    """
+    # Read room measurement files
+    rir = HRIR(hrir.estimator)
+    pattern = r'^room-?.*\.wav$'.format(pattern=SPEAKER_LIST_PATTERN)  # room-L-FL,FR.wav, room.wav, room-L.wav
+    for i, file_name in enumerate([f for f in os.listdir(dir_path) if re.match(pattern, f)]):
+        side = None
+        if '-L-' in file_name:
+            side = 'left'
+        elif '-R-' in file_name:
+            side = 'right'
+        # Read the speaker names from the file name into a list
+        speakers = re.search(SPEAKER_LIST_PATTERN, file_name)
+        if speakers is not None:
+            speakers = speakers[0].split(',')
+        # Form absolute path
+        file_path = os.path.join(dir_path, file_name)
+        # Read WAV
+        room_fs, room_data = read_wav(file_path)
+        if room_fs != hrir.fs:
+            raise ValueError('Room measurement sampling rate must match HRIR sampling rate.')
+        # TODO: Split track
+        # Add impulse responses to room HRIR container
+        # TODO: Speakers without tracks use average (or abs min) of all the other tracks
+        for speaker in speakers:
+            if speaker not in rir.irs:
+                rir.irs[speaker] = dict()
+            rir.irs[speaker][side] = ImpulseResponse(
+                rir.estimator.estimate(room_data),
+                rir.fs,
+                recording=room_data[i]
+            )
+    if not len(rir.irs):
+        return None
+
+    # Room target
+    if room_target is None:
+        room_target = os.path.join(dir_path, 'room-target.csv')
+        if os.path.isfile(room_target):
+            room_target = FrequencyResponse.read_from_csv(room_target)
+            room_target.interpolate()
+            room_target.center()
+        else:
+            room_target = None
+
+    # Room measurement microphone calibration
+    if room_mic_calibration is None:
+        room_mic_calibration = os.path.join(dir_path, 'room-mic-calibration.*')
+        if os.path.isfile(room_mic_calibration):
+            room_mic_calibration = FrequencyResponse.read_from_csv(room_mic_calibration)
+            room_mic_calibration.interpolate()
+            room_mic_calibration.center()
+        else:
+            room_mic_calibration = None
+
+    # Crop heads and tails from room impulse responses
+    for speaker, pair in rir.irs.items():
+        for side, ir in pair.items():
+            ir.crop_head()
+    rir.crop_tails()
+
+    plots = None
+    if plot:
+        plot_dir = os.path.join(dir_path, 'plots', 'room')
+        # Plot all but frequency response
+        os.makedirs(plot_dir, exist_ok=True)
+        plots = rir.plot(dir_path=plot_dir, plot_fr=False)
+
+    # Create equalization filters and equalize
+    for speaker, pair in rir.irs.items():
+        for side, ir in pair.items():
+            fr = ir.frequency_response()
+            if room_mic_calibration is not None:
+                # Calibrate frequency response
+                fr.raw -= room_mic_calibration.raw
+            fr.process(
+                compensation=room_target,
+                min_mean_error=True,
+                equalize=True,
+                treble_f_lower=10000,
+                treble_f_upper=20000
+            )
+            if plot:
+                fr.plot_graph(fig=plots[speaker][side]['fig'], ax=plots[speaker][side]['ax'][0, 2])
+            # TODO: Some alien-tech mixed phase filter
+            fir = fr.minimum_phase_impulse_response()
+            # Equalize
+            hrir.irs[speaker][side].equalize(fir)
+    # TODO: sync FR plot axes
+    return rir
 
 
 def compensate_headphones(recording, hrir, fig_path=None):
@@ -245,6 +364,11 @@ def create_cli():
     arg_parser.add_argument('--dir_path', type=str, help='Path to directory for recordings and outputs.')
     arg_parser.add_argument('--test_signal', type=str,
                             help='Path to sine sweep test signal or pickled impulse response estimator.')
+    arg_parser.add_argument('--room_target', type=str,
+                            help='Path to room target response AutoEQ style CSV file.')
+    arg_parser.add_argument('--room_mic_calibration', type=str,
+                            help='Path to room measurement microphone calibration file. AutoEQ CSV files and MiniDSP'
+                                 'txt files are  supported.')
     arg_parser.add_argument('--fs', type=int, help='Output sampling rate in Hertz.')
     arg_parser.add_argument('--plot', action='store_true', help='Plot graphs for debugging.')
     args = vars(arg_parser.parse_args())

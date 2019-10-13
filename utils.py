@@ -6,7 +6,7 @@ import soundfile as sf
 from scipy.fftpack import fft
 
 
-def read_wav(file_path):
+def read_wav(file_path, expand=False):
     """Reads WAV file
 
     Args:
@@ -22,6 +22,8 @@ def read_wav(file_path):
     if len(data.shape) > 1:
         # Soundfile has tracks on columns, we want them on rows
         data = np.transpose(data)
+    elif expand:
+        data = np.expand_dims(data, axis=0)
     return fs, data
 
 

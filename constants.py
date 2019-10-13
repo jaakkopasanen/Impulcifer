@@ -3,6 +3,10 @@
 # https://en.wikipedia.org/wiki/Surround_sound
 SPEAKER_NAMES = ['FL', 'FR', 'FC', 'BL', 'BR', 'SL', 'SR']
 
+SPEAKER_PATTERN = f'({"|".join(SPEAKER_NAMES + ["X"])})'
+SPEAKER_LIST_PATTERN = r'{speaker_pattern}+(,{speaker_pattern})*'.format(speaker_pattern=SPEAKER_PATTERN)
+
+
 # Each channel, left and right
 IR_ORDER = []
 for _ch in SPEAKER_NAMES:

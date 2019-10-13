@@ -7,25 +7,25 @@ from utils import read_wav, write_wav
 import numpy as np
 from threading import Thread
 import argparse
-import warnings
 
 
 class DeviceNotFoundError(Exception):
     pass
 
 
-def record_target(file_path, length, fs):
+def record_target(file_path, length, fs, channels=2):
     """Records audio and writes it to a file.
 
     Args:
         file_path: Path to output file
         length: Audio recording length in samples
         fs: Sampling rate
+        channels: Number of channels in the recording
 
     Returns:
         None
     """
-    recording = sd.rec(length, samplerate=fs, channels=2, blocking=True)
+    recording = sd.rec(length, samplerate=fs, channels=channels, blocking=True)
     max_gain = 20 * np.log10(np.max(np.abs(recording)))
     write_wav(file_path, fs, recording)
     print(f'Headroom: {-1.0*max_gain:.1f} dB')
@@ -84,7 +84,7 @@ def get_device(device_name, kind, host_api=None, min_channels=1):
         if device[f'max_{kind}_channels'] < min_channels:
             # Channel count not satisfied
             raise DeviceNotFoundError(f'Found {kind} device "{device["name"]} {host_api_names[device["hostapi"]]}" '
-                                      f'but minimum number of channels is not satisfied. 2')
+                                      f'but minimum number of channels is not satisfied.')
     else:
         # Host API not in the name and host API is not given as parameter
         host_api_preference = [x for x in ['DirectSound', 'MME', 'WASAPI'] if x in host_api_names]
@@ -124,10 +124,7 @@ def get_devices(input_device=None, output_device=None, host_api=None, min_channe
     if input_device is None:
         # Not given, use default
         input_device = devices[sd.default.device[0]]['name']
-    input_device = get_device(input_device, 'input', host_api=host_api, min_channels=2)
-
-    if input_device['max_input_channels'] < 2:
-        warnings.warn('Input device has less than 2 input channels!')
+    input_device = get_device(input_device, 'input', host_api=host_api)
 
     # Select output device
     if output_device is None:
@@ -156,7 +153,7 @@ def set_default_devices(input_device, output_device):
     return input_device_str, output_device_str
 
 
-def play_and_record(play=None, record=None, input_device=None, output_device=None, host_api=None):
+def play_and_record(play=None, record=None, input_device=None, output_device=None, host_api=None, channels=2):
     """Plays one file and records another at the same time
 
     Args:
@@ -165,6 +162,7 @@ def play_and_record(play=None, record=None, input_device=None, output_device=Non
         input_device: Number of the input device as seen by sounddevice
         output_device: Number of the output device as seen by sounddevice
         host_api: Host API name
+        channels: Number of output channels
 
     Returns:
         None
@@ -189,7 +187,7 @@ def play_and_record(play=None, record=None, input_device=None, output_device=Non
     print(f'Input device:  "{input_device_str}"')
     print(f'Output device: "{output_device_str}"')
 
-    recorder = Thread(target=record_target, args=(record, data.shape[1], fs))
+    recorder = Thread(target=record_target, args=(record, data.shape[1], fs), kwargs={'channels': channels})
     recorder.start()
     sd.play(np.transpose(data), samplerate=fs, blocking=True)
 
@@ -223,6 +221,7 @@ def create_cli():
                                  'are: "MME", "DirectSound" and "WASAPI". This is used when input and '
                                  'output devices have not been specified (using system defaults) or if they have no '
                                  'host API specified.')
+    arg_parser.add_argument('--channels', type=int, default=2, help='Number of output channels.')
     args = vars(arg_parser.parse_args())
     return args
 

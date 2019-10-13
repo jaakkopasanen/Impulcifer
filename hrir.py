@@ -289,6 +289,8 @@ class HRIR:
                     im = im.convert('P', palette=Image.ADAPTIVE, colors=60)
                     im.save(file_path, optimize=True)
 
+        return plots
+
     def plot_result(self, dir_path):
         """Plot left and right side results with all impulse responses stacked
 
