@@ -11,6 +11,7 @@ def read_wav(file_path, expand=False):
 
     Args:
         file_path: Path to WAV file as string
+        expand: Expand dimensions of a single track recording to produce 2-D array?
 
     Returns:
         - sampling frequency as integer

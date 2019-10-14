@@ -17,12 +17,13 @@ class HRIR:
         self.fs = self.estimator.fs
         self.irs = dict()
 
-    def open_recording(self, file_path, speakers, silence_length=2.0):
+    def open_recording(self, file_path, speakers, side=None, silence_length=2.0):
         """Open combined recording and splits it into separate speaker-ear pairs.
 
         Args:
             file_path: Path to recording file.
             speakers: Sequence of recorded speakers.
+            side: Which side (ear) tracks are contained in the file if only one. "left" or "right" or None for both.
             silence_length: Length of silence used during recording in seconds.
 
         Returns:
@@ -32,7 +33,7 @@ class HRIR:
             raise ValueError('Refusing to open recording because HRIR\'s sampling rate doesn\'t match impulse response '
                              'estimator\'s sampling rate.')
 
-        fs, recording = read_wav(file_path)
+        fs, recording = read_wav(file_path, expand=True)
         if fs != self.fs:
             raise ValueError('Sampling rate of recording must match sampling rate of test signal.')
 
@@ -40,8 +41,11 @@ class HRIR:
             raise ValueError('Silence length must produce full samples with given sampling rate.')
         silence_length = int(silence_length * self.fs)
 
+        # 2 tracks per speaker when side is not specified, only 1 track per speaker when it is
+        tracks_k = 2 if side is None else 1
+
         # Number of speakers in each track
-        n_columns = round(len(speakers) / (recording.shape[0] // 2))
+        n_columns = round(len(speakers) / (recording.shape[0] // tracks_k))
 
         # Crop out initial silence
         recording = recording[:, silence_length:]
@@ -61,13 +65,28 @@ class HRIR:
                 if speaker not in SPEAKER_NAMES:
                     # Skip non-standard speakers. Useful for skipping the other sweep in center channel recording.
                     continue
-                left = column[i, :]  # Left ear of current speaker
-                right = column[i + 1, :]  # Right ear of current speaker
                 if speaker not in self.irs:
                     self.irs[speaker] = dict()
-                self.irs[speaker]['left'] = ImpulseResponse(self.estimator.estimate(left), self.fs, left)
-                self.irs[speaker]['right'] = ImpulseResponse(self.estimator.estimate(right), self.fs, right)
-            i += 2
+                if side is None:
+                    # Left first, right then
+                    self.irs[speaker]['left'] = ImpulseResponse(
+                        self.estimator.estimate(column[i, :]),
+                        self.fs,
+                        column[i, :]
+                    )
+                    self.irs[speaker]['right'] = ImpulseResponse(
+                        self.estimator.estimate(column[i + 1, :]),
+                        self.fs,
+                        column[i + 1, :]
+                    )
+                else:
+                    # Only the given side
+                    self.irs[speaker][side] = ImpulseResponse(
+                        self.estimator.estimate(column[i, :]),
+                        self.fs,
+                        column[i, :]
+                    )
+            i += tracks_k
 
     def write_wav(self, file_path, track_order=None, bit_depth=32):
         """Writes impulse responses to a WAV file
@@ -279,9 +298,10 @@ class HRIR:
                     plots[speaker][side]['ax'][0, 2].set_ylim(lims['decay']['ylim'])
 
         # Show plots and write figures to files
-        for speaker, pair in self.irs.items():
-            for side, ir in pair.items():
-                if dir_path is not None:
+        if dir_path is not None:
+            os.makedirs(dir_path, exist_ok=True)
+            for speaker, pair in self.irs.items():
+                for side, ir in pair.items():
                     file_path = os.path.join(dir_path, f'{speaker}-{side}.png')
                     plots[speaker][side]['fig'].savefig(file_path, bbox_inches='tight')
                     # Optimize file size

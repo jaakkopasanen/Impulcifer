@@ -12,7 +12,7 @@ from impulse_response_estimator import ImpulseResponseEstimator
 from hrir import HRIR
 from impulse_response import ImpulseResponse
 from utils import sync_axes, read_wav
-from constants import SPEAKER_NAMES, SPEAKER_PATTERN, SPEAKER_LIST_PATTERN
+from constants import SPEAKER_NAMES, SPEAKER_LIST_PATTERN
 
 
 def main(dir_path=None,
@@ -36,16 +36,16 @@ def main(dir_path=None,
     eq = os.path.join(dir_path, 'eq.wav')
 
     # Read files
-    if re.match('^.+\.wav$', test_signal, flags=re.IGNORECASE):
+    if re.match(r'^.+\.wav$', test_signal, flags=re.IGNORECASE):
         estimator = ImpulseResponseEstimator.from_wav(test_signal)
-    elif re.match('^.+\.pkl$', test_signal, flags=re.IGNORECASE):
+    elif re.match(r'^.+\.pkl$', test_signal, flags=re.IGNORECASE):
         estimator = ImpulseResponseEstimator.from_pickle(test_signal)
     else:
         raise TypeError(f'Unknown file extension for test signal "{test_signal}"')
 
     # HRIR measurements
     hrir = HRIR(estimator)
-    pattern = r'^{pattern}\.wav$'.format(pattern=SPEAKER_PATTERN)  # FL,FR.wav
+    pattern = r'^{pattern}\.wav$'.format(pattern=SPEAKER_LIST_PATTERN)  # FL,FR.wav
     for file_name in [f for f in os.listdir(dir_path) if re.match(pattern, f)]:
         # Read the speaker names from the file name into a list
         speakers = re.search(SPEAKER_LIST_PATTERN, file_name)[0].split(',')
@@ -53,6 +53,8 @@ def main(dir_path=None,
         file_path = os.path.join(dir_path, file_name)
         # Open the file and add tracks to HRIR
         hrir.open_recording(file_path, speakers=speakers)
+    if len(hrir.irs) == 0:
+        raise ValueError('No HRIR recordings found in the directory.')
 
     # Write multi-channel WAV file with sine sweeps for debugging
     hrir.write_wav(os.path.join(dir_path, 'responses.wav'))
@@ -133,51 +135,43 @@ def correct_room(hrir, dir_path=None, room_target=None, room_mic_calibration=Non
     """
     # Read room measurement files
     rir = HRIR(hrir.estimator)
-    pattern = r'^room-?.*\.wav$'.format(pattern=SPEAKER_LIST_PATTERN)  # room-L-FL,FR.wav, room.wav, room-L.wav
+    # room-BL,SL.wav, room-left-FL,FR.wav, room-right-FC.wav, etc...
+    pattern = r'^room-((left|right)-)?{pattern}\.wav$'.format(pattern=SPEAKER_LIST_PATTERN)
     for i, file_name in enumerate([f for f in os.listdir(dir_path) if re.match(pattern, f)]):
-        side = None
-        if '-L-' in file_name:
-            side = 'left'
-        elif '-R-' in file_name:
-            side = 'right'
         # Read the speaker names from the file name into a list
         speakers = re.search(SPEAKER_LIST_PATTERN, file_name)
         if speakers is not None:
             speakers = speakers[0].split(',')
+        # Read side if present
+        side = re.search(r'(?:-)(left|right)(?:-)', file_name)
+        if side is not None:
+            side = side[0].replace('-', '')  # First group, remove dashes
         # Form absolute path
         file_path = os.path.join(dir_path, file_name)
-        # Read WAV
-        room_fs, room_data = read_wav(file_path)
-        if room_fs != hrir.fs:
-            raise ValueError('Room measurement sampling rate must match HRIR sampling rate.')
-        # TODO: Split track
-        # Add impulse responses to room HRIR container
-        # TODO: Speakers without tracks use average (or abs min) of all the other tracks
-        for speaker in speakers:
-            if speaker not in rir.irs:
-                rir.irs[speaker] = dict()
-            rir.irs[speaker][side] = ImpulseResponse(
-                rir.estimator.estimate(room_data),
-                rir.fs,
-                recording=room_data[i]
-            )
+        # Read file
+        rir.open_recording(file_path, speakers, side=side)
     if not len(rir.irs):
+        # No room recording files found
         return None
 
     # Room target
     if room_target is None:
         room_target = os.path.join(dir_path, 'room-target.csv')
         if os.path.isfile(room_target):
+            # File exists, create frequency response
             room_target = FrequencyResponse.read_from_csv(room_target)
             room_target.interpolate()
             room_target.center()
         else:
-            room_target = None
+            # No room target specified, use flat
+            room_target = FrequencyResponse(name='room-target')
+            room_target.raw = np.zeros(room_target.frequency.shape)
 
     # Room measurement microphone calibration
     if room_mic_calibration is None:
-        room_mic_calibration = os.path.join(dir_path, 'room-mic-calibration.*')
+        room_mic_calibration = os.path.join(dir_path, 'room-mic-calibration.csv')
         if os.path.isfile(room_mic_calibration):
+            # File found, create frequency response
             room_mic_calibration = FrequencyResponse.read_from_csv(room_mic_calibration)
             room_mic_calibration.interpolate()
             room_mic_calibration.center()
@@ -212,7 +206,7 @@ def correct_room(hrir, dir_path=None, room_target=None, room_mic_calibration=Non
                 treble_f_upper=20000
             )
             if plot:
-                fr.plot_graph(fig=plots[speaker][side]['fig'], ax=plots[speaker][side]['ax'][0, 2])
+                fr.plot_graph(fig=plots[speaker][side]['fig'], ax=plots[speaker][side]['ax'][1, 1], show=False)
             # TODO: Some alien-tech mixed phase filter
             fir = fr.minimum_phase_impulse_response()
             # Equalize

@@ -307,7 +307,14 @@ class ImpulseResponse:
             treble_f_upper=1000,
 
         )
-        fig, ax = fr.plot_graph(fig=fig, ax=ax, file_path=plot_file_path, raw=plot_raw, smoothed=plot_smoothed)
+        fig, ax = fr.plot_graph(
+            fig=fig,
+            ax=ax,
+            file_path=plot_file_path,
+            raw=plot_raw,
+            smoothed=plot_smoothed,
+            show=False
+        )
         return fig, ax
 
     def plot_decay(self, fig=None, ax=None, plot_file_path=None):
