@@ -74,13 +74,13 @@ def main(dir_path=None,
     hrir.crop_tails()
 
     # Room correction
-    # rir = correct_room(
-    #     hrir,
-    #     dir_path=dir_path,
-    #     room_target=room_target,
-    #     room_mic_calibration=room_mic_calibration,
-    #     plot=plot
-    # )
+    rir = correct_room(
+        hrir,
+        dir_path=dir_path,
+        room_target=room_target,
+        room_mic_calibration=room_mic_calibration,
+        plot=plot
+    )
     # TODO: Add room stats to README
 
     # Compensate headphones
@@ -137,17 +137,14 @@ def correct_room(hrir, dir_path=None, room_target=None, room_mic_calibration=Non
     # Read room measurement files
     rir = HRIR(hrir.estimator)
     # room-BL,SL.wav, room-left-FL,FR.wav, room-right-FC.wav, etc...
-    # TODO: room-FL,FR-left.wav
-    pattern = r'^room-((left|right)-)?{pattern}\.wav$'.format(pattern=SPEAKER_LIST_PATTERN)
+    pattern = r'^room-{pattern}(-(left|right))?\.wav$'.format(pattern=SPEAKER_LIST_PATTERN)
     for i, file_name in enumerate([f for f in os.listdir(dir_path) if re.match(pattern, f)]):
         # Read the speaker names from the file name into a list
         speakers = re.search(SPEAKER_LIST_PATTERN, file_name)
         if speakers is not None:
             speakers = speakers[0].split(',')
         # Read side if present
-        side = re.search(r'(?:-)(left|right)(?:-)', file_name)
-        if side is not None:
-            side = side[0].replace('-', '')  # First group, remove dashes
+        side = re.search(r'(left|right)', file_name)[0]
         # Form absolute path
         file_path = os.path.join(dir_path, file_name)
         # Read file
@@ -171,6 +168,7 @@ def correct_room(hrir, dir_path=None, room_target=None, room_mic_calibration=Non
 
     # Room measurement microphone calibration
     if room_mic_calibration is None:
+        # TODO: quess CSV format
         room_mic_calibration = os.path.join(dir_path, 'room-mic-calibration.csv')
         if os.path.isfile(room_mic_calibration):
             # File found, create frequency response
@@ -180,31 +178,19 @@ def correct_room(hrir, dir_path=None, room_target=None, room_mic_calibration=Non
         else:
             room_mic_calibration = None
 
-    plots = None
-    if plot:
-        plot_dir = os.path.join(dir_path, 'plots', 'room')
-        # Plot all but frequency response
-        os.makedirs(plot_dir, exist_ok=True)
-        plots = rir.plot(dir_path=plot_dir, plot_fr=False, close_plots=False)
-        for speaker, pair in rir.irs.items():
-            for side, ir in pair.items():
-                fr = rir.irs[speaker][side].frequency_response()
-                fr.process(
-                    compensation=room_target,
-                    min_mean_error=True,
-                    equalize=True,
-                    treble_f_lower=10000,
-                    treble_f_upper=20000
-                )
-                fr.plot_graph(fig=plots[speaker][side], ax=plots[speaker][side].get_axes()[1], show=True)
-
     # Crop heads and tails from room impulse responses
     for speaker, pair in rir.irs.items():
         for side, ir in pair.items():
             ir.crop_head()
     rir.crop_tails()
-
     rir.write_wav(os.path.join(dir_path, 'room-responses.wav'))
+
+    figs = None
+    if plot:
+        plot_dir = os.path.join(dir_path, 'plots', 'room')
+        # Plot all but frequency response
+        os.makedirs(plot_dir, exist_ok=True)
+        figs = rir.plot(plot_fr=False, close_plots=False)
 
     # Create equalization filters and equalize
     for speaker, pair in rir.irs.items():
@@ -213,20 +199,42 @@ def correct_room(hrir, dir_path=None, room_target=None, room_mic_calibration=Non
             if room_mic_calibration is not None:
                 # Calibrate frequency response
                 fr.raw -= room_mic_calibration.raw
-            if plot:
-                fr.plot_graph(fig=plots[speaker][side], ax=plots[speaker][side].get_axes()[1], show=False)
             fr.process(
                 compensation=room_target,
                 min_mean_error=True,
                 equalize=True,
+                max_gain=30,
                 treble_f_lower=10000,
                 treble_f_upper=20000
             )
+            if plot:
+                file_path = os.path.join(dir_path, 'plots', 'room', f'{speaker}-{side}.png')
+                ir.plot_fr(
+                    fr=fr,
+                    fig=figs[speaker][side],
+                    ax=figs[speaker][side].get_axes()[4],
+                    plot_raw=False,
+                    plot_error=False,
+                    plot_file_path=file_path
+                )
             # TODO: Some alien-tech mixed phase filter
             fir = fr.minimum_phase_impulse_response()
             # Equalize
             hrir.irs[speaker][side].equalize(fir)
-    # TODO: sync FR plot axes
+
+    if plot:
+        # Sync FR plot axes
+        axes = []
+        for speaker, pair in figs.items():
+            for side, fig in pair.items():
+                axes.append(fig.get_axes()[5])
+        sync_axes(axes)
+        # Save figures
+        for speaker, pair in figs.items():
+            for side, fig in pair.items():
+                fig.savefig(os.path.join(dir_path, 'plots', 'room', f'{speaker}-{side}.png'))
+                plt.close(fig)
+
     return rir
 
 

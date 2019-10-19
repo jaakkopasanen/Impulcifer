@@ -297,10 +297,19 @@ class HRIR:
         for speaker, pair in self.irs.items():
             for i, ir in enumerate(pair.values()):
                 stacks[i].append(ir.data)
+        figs = []
         for i, side in enumerate(['Left', 'Right']):
             data = np.sum(np.vstack(stacks[i]), axis=0)
             ir = ImpulseResponse(data, self.fs)
-            ir.plot_fr(plot_file_path=os.path.join(dir_path, f'{side}.png'))
+            fig, _ = ir.plot_fr()
+            figs.append(fig)
+
+        # Sync axes
+        sync_axes([fig.get_axes()[0] for fig in figs])
+
+        # Save figures
+        for i, side in enumerate(['Left', 'Right']):
+            figs[i].savefig(os.path.join(dir_path, f'{side}.png'))
 
     def equalize(self, fir):
         """Equalizes all impulse responses with given FIR filters.

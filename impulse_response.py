@@ -334,30 +334,48 @@ class ImpulseResponse:
 
         return fig, ax
 
-    def plot_fr(self, fig=None, ax=None, plot_file_path=None, plot_raw=True, plot_smoothed=True):
+    def plot_fr(self,
+                fr=None,
+                fig=None,
+                ax=None,
+                plot_file_path=None,
+                plot_raw=True,
+                plot_smoothed=True,
+                plot_error=True,
+                plot_error_smoothed=True,
+                plot_target=True,
+                plot_equalization=True,
+                plot_equalized=True):
         """Plots frequency response
 
         Args:
+            fr: FrequencyResponse instance. Useful for passing instance with taget, error, equalization etc...
             fig: Figure instance
             ax: Axes instance
             plot_file_path: Path to a file for saving the plot
-            plot_raw: Include raw data?
-            plot_smoothed: Include smoothed data?
+            plot_raw: Include raw curve?
+            plot_smoothed: Include smoothed curve?
+            plot_error: Include unsmoothed error curve?
+            plot_error_smoothed: Include smoothed error curve?
+            plot_target: Include target curve?
+            plot_equalization: Include equalization curve?
+            plot_equalized: Include equalized curve?
 
         Returns:
             - Figure
             - Axes
         """
-        fr = self.frequency_response()
-        fr.smoothen_fractional_octave(
-            window_size=1 / 3,
-            iterations=1,
-            treble_window_size=1 / 6,
-            treble_iterations=1,
-            treble_f_lower=100,
-            treble_f_upper=1000,
+        if fr is None:
+            fr = self.frequency_response()
+            fr.smoothen_fractional_octave(
+                window_size=1 / 3,
+                iterations=1,
+                treble_window_size=1 / 6,
+                treble_iterations=1,
+                treble_f_lower=100,
+                treble_f_upper=1000,
 
-        )
+            )
         if fig is None:
             fig, ax = plt.subplots()
         ax.set_xlabel('Frequency (Hz)')
@@ -370,18 +388,30 @@ class ImpulseResponse:
         ax.xaxis.set_major_formatter(ticker.StrMethodFormatter('{x:.0f}'))
         legend = []
 
-        ax.plot(fr.frequency, fr.raw, linewidth=0.5)
-        legend.append('Raw')
-
-        ax.plot(fr.frequency, fr.smoothed, linewidth=1)
-        legend.append('Smoothed')
-
-        if fr.target and len(fr.target):
-            ax.plot(fr.frequency, fr.target, linewidth=1)
+        if plot_target and len(fr.target):
+            ax.plot(fr.frequency, fr.target, linewidth=5, color='lightblue')
             legend.append('Target')
-        if fr.error_smoothed and len(fr.error_smoothed):
-            ax.plot(fr.frequency, fr.error_smoothed, linewidth=1)
+        if plot_raw and len(fr.raw):
+            ax.plot(fr.frequency, fr.raw, linewidth=0.5, color='grey')
+            legend.append('Raw')
+        if plot_error and len(fr.error):
+            ax.plot(fr.frequency, fr.error, linewidth=0.5, color='pink')
             legend.append('Error')
+        if plot_smoothed and len(fr.smoothed):
+            ax.plot(fr.frequency, fr.smoothed, linewidth=1, color='black')
+            legend.append('Raw Smoothed')
+        if plot_error_smoothed and len(fr.error_smoothed):
+            ax.plot(fr.frequency, fr.error_smoothed, linewidth=1, color='red')
+            legend.append('Error Smoothed')
+        if plot_equalization and len(fr.equalization):
+            ax.plot(fr.frequency, fr.equalization, linewidth=1, color='darkgreen')
+            legend.append('Equalization')
+        if plot_equalized and len(fr.equalized_raw) and not len(fr.equalized_smoothed):
+            ax.plot(fr.frequency, fr.equalized_raw, linewidth=1, color='magenta')
+            legend.append('Equalized raw')
+        if plot_equalized and len(fr.equalized_smoothed):
+            ax.plot(fr.frequency, fr.equalized_smoothed, linewidth=1, color='blue')
+            legend.append('Equalized smoothed')
 
         ax.legend(legend, fontsize=8)
 
