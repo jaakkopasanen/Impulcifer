@@ -99,15 +99,16 @@ class ImpulseResponse:
         # Find starting point
         peak_index = np.argmax(decay)
 
-        # Find index where current value is greater than the previous indicating that noise floor has been
-        # reached
+        # Find index where current value is greater than the previous indicating that noise floor has been reached
         i = peak_index + 1
         while i < len(decay):
-            if decay[i] > decay[i - 1]:  # 0.1dB threshold for improvement
+            if decay[i] > decay[i - 1]:
                 break
             i += 1
 
         # Tail index in impulse response, rms has larger window size
+        if i >= len(inds):
+            return len(self.data) - 1
         return inds[i]
 
     def crop_head(self, head_ms=1):
@@ -157,6 +158,69 @@ class ImpulseResponse:
                 return (inds[i] - inds[peak_ind]) / self.fs
             if inds[i] / self.fs > tail_ind:
                 return (tail_ind - inds[peak_ind]) / self.fs
+
+    def magnitude_response(self):
+        """Calculates magnitude response for the data."""
+        return magnitude_response(self.data, self.fs)
+
+    def frequency_response(self):
+        """Creates FrequencyResponse instance."""
+        f, m = self.magnitude_response()
+        n = self.fs / 2 / 4  # 4 Hz resolution
+        step = int(len(f) / n)
+        fr = FrequencyResponse(name='Frequency response', frequency=f[1::step], raw=m[1::step])
+        fr.interpolate()
+        return fr
+
+    def plot(self,
+             fig=None,
+             ax=None,
+             plot_file_path=None,
+             plot_recording=True,
+             plot_spectrogram=True,
+             plot_ir=True,
+             plot_fr=True,
+             plot_decay=True,
+             plot_waterfall=True):
+        """Plots all plots into the same figure
+
+        Args:
+            fig: Figure instance
+            ax: Axes instance, must have 2 rows and 3 columns
+            plot_file_path: Path to a file for saving the plot
+            plot_recording: Plot recording waveform?
+            plot_spectrogram: Plot recording spectrogram?
+            plot_ir: Plot impulse response?
+            plot_fr: Plot frequency response?
+            plot_decay: Plot decay curve?
+            plot_waterfall: Plot waterfall graph?
+
+        Returns:
+            Figure
+        """
+        if fig is None:
+            # Create figure and axises for the plots
+            fig = plt.figure()
+            ax = []
+            for i in range(5):
+                ax.append(fig.add_subplot(2, 3, i + 1))
+            ax.append(fig.add_subplot(2, 3, 6, projection='3d'))
+            ax = np.vstack([ax[:3], ax[3:]])
+        if plot_recording:
+            self.plot_recording(fig=fig, ax=ax[0, 0])
+        if plot_spectrogram:
+            self.plot_spectrogram(fig=fig, ax=ax[1, 0])
+        if plot_ir:
+            self.plot_ir(fig=fig, ax=ax[0, 1])
+        if plot_fr:
+            self.plot_fr(fig=fig, ax=ax[1, 1])
+        if plot_decay:
+            self.plot_decay(fig=fig, ax=ax[0, 2])
+        if plot_waterfall:
+            self.plot_waterfall(fig=fig, ax=ax[1, 2])
+        if plot_file_path:
+            fig.savefig(plot_file_path)
+        return fig
 
     def plot_recording(self, fig=None, ax=None, plot_file_path=None):
         """Plots recording wave form
@@ -270,19 +334,6 @@ class ImpulseResponse:
 
         return fig, ax
 
-    def magnitude_response(self):
-        """Calculates magnitude response for the data."""
-        return magnitude_response(self.data, self.fs)
-
-    def frequency_response(self):
-        """Creates FrequencyResponse instance."""
-        f, m = self.magnitude_response()
-        n = self.fs / 2 / 4  # 4 Hz resolution
-        step = int(len(f) / n)
-        fr = FrequencyResponse(name='Frequency response', frequency=f[1::step], raw=m[1::step])
-        fr.interpolate()
-        return fr
-
     def plot_fr(self, fig=None, ax=None, plot_file_path=None, plot_raw=True, plot_smoothed=True):
         """Plots frequency response
 
@@ -307,14 +358,36 @@ class ImpulseResponse:
             treble_f_upper=1000,
 
         )
-        fig, ax = fr.plot_graph(
-            fig=fig,
-            ax=ax,
-            file_path=plot_file_path,
-            raw=plot_raw,
-            smoothed=plot_smoothed,
-            show=False
-        )
+        if fig is None:
+            fig, ax = plt.subplots()
+        ax.set_xlabel('Frequency (Hz)')
+        ax.semilogx()
+        ax.set_xlim([20, 20e3])
+        ax.set_ylabel('Amplitude (dB)')
+        ax.set_title(fr.name)
+        ax.grid(True, which='major')
+        ax.grid(True, which='minor')
+        ax.xaxis.set_major_formatter(ticker.StrMethodFormatter('{x:.0f}'))
+        legend = []
+
+        ax.plot(fr.frequency, fr.raw, linewidth=0.5)
+        legend.append('Raw')
+
+        ax.plot(fr.frequency, fr.smoothed, linewidth=1)
+        legend.append('Smoothed')
+
+        if fr.target and len(fr.target):
+            ax.plot(fr.frequency, fr.target, linewidth=1)
+            legend.append('Target')
+        if fr.error_smoothed and len(fr.error_smoothed):
+            ax.plot(fr.frequency, fr.error_smoothed, linewidth=1)
+            legend.append('Error')
+
+        ax.legend(legend, fontsize=8)
+
+        if plot_file_path:
+            fig.savefig(plot_file_path)
+
         return fig, ax
 
     def plot_decay(self, fig=None, ax=None, plot_file_path=None):
@@ -334,7 +407,7 @@ class ImpulseResponse:
         t, decay = self.decay()
         ax.plot(t / self.fs * 1000, 20 * np.log10(decay), linewidth=1)
 
-        ax.set_ylim([None, 10])
+        ax.set_ylim([-120, 10])
         ax.set_xlim([
             int(self.peak_index() / self.fs - 1) * 1000,
             int(self.tail_index() / self.fs + 1) * 1000
@@ -352,8 +425,10 @@ class ImpulseResponse:
         if fig is None:
             fig, ax = plt.subplots()
 
+        z_min = -100
+
         # Window
-        nfft = int(self.fs * 0.3)  # 300 ms
+        nfft = min(int(self.fs * 0.3), int(len(self.data) / 10))  # 300 ms or 1/10 of ir length
         noverlap = int(nfft * 0.9)  # 90% overlap
         ascend_ms = 10  # 10 ms ascending window
         ascend = int(ascend_ms / 1000 * self.fs)
@@ -368,7 +443,9 @@ class ImpulseResponse:
         # Crop from 10ms before peak to start of tail
         peak_ind = self.peak_index()
         tail_ind = self.tail_index()
-        data = self.data[int(peak_ind - self.fs * 0.01):tail_ind + nfft]
+        start = max(int(peak_ind - self.fs * 0.01), 0)
+        stop = min(tail_ind + nfft, len(self.data))
+        data = self.data[start:stop]
 
         # Get spectrogram data
         spectrum, freqs, t = specgram(data, Fs=self.fs, NFFT=nfft, noverlap=noverlap, mode='magnitude', window=window)
@@ -391,6 +468,7 @@ class ImpulseResponse:
 
         # Normalize and turn to dB scale
         z /= np.max(z)
+        z = np.clip(z, 10**(z_min/20), np.max(z))
         z = 20 * np.log10(z)
 
         # Smoothen
@@ -402,17 +480,23 @@ class ImpulseResponse:
         f = f[1:-1, :-1]
         z = z[1:-1, :-1]
 
-        ax.plot_surface(t, f, z, cmap='magma', antialiased=True)
+        # Surface plot
+        vmin = -100
+        ax.plot_surface(t, f, z, cmap='magma', antialiased=True, vmin=z_min, vmax=0)
 
-        # Y (frequency) labels
-        ax.yaxis.set_major_formatter(FuncFormatter(lambda x, p: f'{10 ** x:.0f}'))
-
-        # Z labels
+        # Z axis
+        ax.set_zlim([z_min, 0])
         ax.zaxis.set_major_locator(LinearLocator(10))
         ax.zaxis.set_major_formatter(FormatStrFormatter('%.02f'))
 
+        # X axis
+        ax.set_xlim([0, None])
         ax.set_xlabel('Time (ms)')
+
+        # Y axis
+        ax.set_ylim(np.log10([20, 20000]))
         ax.set_ylabel('Frequency (Hz)')
+        ax.yaxis.set_major_formatter(FuncFormatter(lambda x, p: f'{10 ** x:.0f}'))
 
         # Orient
         ax.view_init(30, 30)
