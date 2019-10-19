@@ -81,7 +81,6 @@ def main(dir_path=None,
         room_mic_calibration=room_mic_calibration,
         plot=plot
     )
-    # TODO: Add room stats to README
 
     # Compensate headphones
     if os.path.isfile(headphones):
