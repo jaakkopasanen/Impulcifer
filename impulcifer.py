@@ -225,7 +225,7 @@ def correct_room(hrir, dir_path=None, room_target=None, room_mic_calibration=Non
             fir = fr.minimum_phase_impulse_response()
             fir *= fir_gain
             # Add SPL change from distance
-            fir *= 10**(IR_ROOM_SPL[speaker][side])
+            fir *= 10**(IR_ROOM_SPL[speaker][side] / 20)
             # Equalize
             hrir.irs[speaker][side].equalize(fir)
 
