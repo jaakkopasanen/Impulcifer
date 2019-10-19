@@ -91,3 +91,53 @@ def sync_axes(axes, sync_x=True, sync_y=True):
             ax.set_xlim(xlim)
         if sync_y:
             ax.set_ylim(ylim)
+
+
+def versus_distance(angle=30, distance=3, breadth=0.148, ear='primary', sound_field='reverberant', sound_velocity=343):
+    """Calculates speaker-ear distance delta, dealy delta and SPL delta
+
+    Speaker-ear distance delta is the difference between distance from speaker to middle of the head and distance from
+    speaker to ear.
+
+    Dealy delta is the time it takes for sound to travel speaker-ear distance delta.
+
+    SPL delta is the sound pressure level change in dB for a distance delta.
+
+    Sound pressure attenuates by 3 dB for each distance doubling in reverberant room
+    (http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.10.1442&rep=rep1&type=pdf).
+
+    Sound pressure attenuates by 6 dB for each distance doubling in free field and does not attenuate in diffuse field.
+
+    Args:
+        angle: Angle between center and the speaker in degrees
+        distance: Distance from speaker to the middle of the head in meters
+        breadth: Head breadth in meters
+        ear: Which ear? "primary" for same side ear as the speaker or "secondary" for the opposite side
+        sound_field: Sound field determines the attenuation over distance. 3 dB for "reverberant", 6 dB for "free"
+                     and 0 dB for "diffuse"
+        sound_velocity: The speed of sound in meters per second
+
+    Returns:
+        - Distance delta in meters
+        - Delay delta in seconds
+        - SPL delta in dB
+    """
+    if ear == 'primary':
+        aa = (90 - angle) / 180 * np.pi
+    elif ear == 'secondary':
+        aa = (90 + angle) / 180 * np.pi
+    else:
+        raise ValueError('Ear must be "primary" or "secondary".')
+    b = np.sqrt(distance ** 2 + (breadth / 2) ** 2 - 2 * distance * (breadth / 2) * np.cos(aa))
+    d = b - distance
+    delay = d / sound_velocity
+    spl = np.log(b / distance) / np.log(2)
+    if sound_field == 'reverberant':
+        spl *= -3
+    elif sound_field == 'free':
+        spl *= -6
+    elif sound_field == 'diffuse':
+        spl *= -0
+    else:
+        raise ValueError('Sound field must be "reverberant", "free" or "diffuse".')
+    return d, delay, spl

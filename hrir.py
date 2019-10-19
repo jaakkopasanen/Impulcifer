@@ -171,7 +171,7 @@ class HRIR:
 
             # Speaker channel delay
             head = head_ms * self.fs // 1000
-            delay = int(np.round(SPEAKER_DELAYS[speaker] / 1000 * self.fs)) + head  # Channel delay in samples
+            delay = int(np.round(SPEAKER_DELAYS[speaker] * self.fs)) + head  # Channel delay in samples
 
             if peak_left < peak_right:
                 # Delay to left ear is smaller, this is must left side speaker
@@ -297,19 +297,18 @@ class HRIR:
         for speaker, pair in self.irs.items():
             for i, ir in enumerate(pair.values()):
                 stacks[i].append(ir.data)
-        figs = []
+        fig, ax = plt.subplots(1, 2)
+        fig.set_size_inches(14, 6)
         for i, side in enumerate(['Left', 'Right']):
             data = np.sum(np.vstack(stacks[i]), axis=0)
             ir = ImpulseResponse(data, self.fs)
-            fig, _ = ir.plot_fr()
-            figs.append(fig)
+            ir.plot_fr(fig=fig, ax=ax[i])
 
         # Sync axes
-        sync_axes([fig.get_axes()[0] for fig in figs])
+        sync_axes(ax)
 
         # Save figures
-        for i, side in enumerate(['Left', 'Right']):
-            figs[i].savefig(os.path.join(dir_path, f'{side}.png'))
+        fig.savefig(os.path.join(dir_path, f'Results.png'), bbox_inches='tight')
 
     def equalize(self, fir):
         """Equalizes all impulse responses with given FIR filters.

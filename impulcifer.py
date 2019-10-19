@@ -12,7 +12,7 @@ from impulse_response_estimator import ImpulseResponseEstimator
 from hrir import HRIR
 from impulse_response import ImpulseResponse
 from utils import sync_axes, read_wav
-from constants import SPEAKER_NAMES, SPEAKER_LIST_PATTERN
+from constants import SPEAKER_NAMES, SPEAKER_LIST_PATTERN, IR_ROOM_SPL
 
 
 def main(dir_path=None,
@@ -193,12 +193,18 @@ def correct_room(hrir, dir_path=None, room_target=None, room_mic_calibration=Non
         figs = rir.plot(plot_fr=False, close_plots=False)
 
     # Create equalization filters and equalize
+    ref_gain = None
     for speaker, pair in rir.irs.items():
         for side, ir in pair.items():
             fr = ir.frequency_response()
             if room_mic_calibration is not None:
                 # Calibrate frequency response
                 fr.raw -= room_mic_calibration.raw
+
+            # Save original data for gain syncing
+            original = fr.raw.copy()
+
+            # Process
             fr.process(
                 compensation=room_target,
                 min_mean_error=True,
@@ -207,20 +213,32 @@ def correct_room(hrir, dir_path=None, room_target=None, room_mic_calibration=Non
                 treble_f_lower=10000,
                 treble_f_upper=20000
             )
+
+            # Sync gains
+            sl = np.logical_and(fr.frequency >= 100, fr.frequency <= 10000)
+            gain = np.mean(original[sl] + fr.equalization[sl])
+            if ref_gain is None:
+                ref_gain = gain
+            fir_gain = 10**((ref_gain - gain) / 20)
+
+            # TODO: Some alien-tech mixed phase filter
+            fir = fr.minimum_phase_impulse_response()
+            fir *= fir_gain
+            # Add SPL change from distance
+            fir *= 10**(IR_ROOM_SPL[speaker][side])
+            # Equalize
+            hrir.irs[speaker][side].equalize(fir)
+
             if plot:
                 file_path = os.path.join(dir_path, 'plots', 'room', f'{speaker}-{side}.png')
                 ir.plot_fr(
                     fr=fr,
                     fig=figs[speaker][side],
                     ax=figs[speaker][side].get_axes()[4],
-                    plot_raw=False,
+                    plot_raw=True,
                     plot_error=False,
                     plot_file_path=file_path
                 )
-            # TODO: Some alien-tech mixed phase filter
-            fir = fr.minimum_phase_impulse_response()
-            # Equalize
-            hrir.irs[speaker][side].equalize(fir)
 
     if plot:
         # Sync FR plot axes

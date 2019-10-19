@@ -389,28 +389,28 @@ class ImpulseResponse:
         legend = []
 
         if plot_target and len(fr.target):
-            ax.plot(fr.frequency, fr.target, linewidth=5, color='lightblue')
+            ax.plot(fr.frequency, fr.target, linewidth=5, color='#ecdef9')
             legend.append('Target')
         if plot_raw and len(fr.raw):
-            ax.plot(fr.frequency, fr.raw, linewidth=0.5, color='grey')
+            ax.plot(fr.frequency, fr.raw, linewidth=0.5, color='#7db4db')
             legend.append('Raw')
         if plot_error and len(fr.error):
-            ax.plot(fr.frequency, fr.error, linewidth=0.5, color='pink')
+            ax.plot(fr.frequency, fr.error, linewidth=0.5, color='#dd8081')
             legend.append('Error')
         if plot_smoothed and len(fr.smoothed):
-            ax.plot(fr.frequency, fr.smoothed, linewidth=1, color='black')
+            ax.plot(fr.frequency, fr.smoothed, linewidth=1, color='#1f77b4')
             legend.append('Raw Smoothed')
         if plot_error_smoothed and len(fr.error_smoothed):
-            ax.plot(fr.frequency, fr.error_smoothed, linewidth=1, color='red')
+            ax.plot(fr.frequency, fr.error_smoothed, linewidth=1, color='#d62728')
             legend.append('Error Smoothed')
         if plot_equalization and len(fr.equalization):
-            ax.plot(fr.frequency, fr.equalization, linewidth=1, color='darkgreen')
+            ax.plot(fr.frequency, fr.equalization, linewidth=1, color='#2ca02c')
             legend.append('Equalization')
         if plot_equalized and len(fr.equalized_raw) and not len(fr.equalized_smoothed):
-            ax.plot(fr.frequency, fr.equalized_raw, linewidth=1, color='magenta')
+            ax.plot(fr.frequency, fr.equalized_raw, linewidth=1, color='#680fb9')
             legend.append('Equalized raw')
         if plot_equalized and len(fr.equalized_smoothed):
-            ax.plot(fr.frequency, fr.equalized_smoothed, linewidth=1, color='blue')
+            ax.plot(fr.frequency, fr.equalized_smoothed, linewidth=1, color='#680fb9')
             legend.append('Equalized smoothed')
 
         ax.legend(legend, fontsize=8)
