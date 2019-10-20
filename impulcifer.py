@@ -21,7 +21,9 @@ def main(dir_path=None,
          room_target=None,
          room_mic_calibration=None,
          fs=None,
-         plot=False):
+         plot=False,
+         room_correction=True,
+         headphone_compensation=True):
     """"""
     if dir_path is None or not os.path.isdir(dir_path):
         raise NotADirectoryError(f'Given dir path "{dir_path}"" is not a directory.')
@@ -75,16 +77,17 @@ def main(dir_path=None,
     hrir.crop_tails()
 
     # Room correction
-    rir = correct_room(
-        hrir,
-        dir_path=dir_path,
-        room_target=room_target,
-        room_mic_calibration=room_mic_calibration,
-        plot=plot
-    )
+    if room_correction:
+        correct_room(
+            hrir,
+            dir_path=dir_path,
+            room_target=room_target,
+            room_mic_calibration=room_mic_calibration,
+            plot=plot
+        )
 
     # Compensate headphones
-    if os.path.isfile(headphones):
+    if os.path.isfile(headphones) and headphone_compensation:
         compensate_headphones(headphones, hrir, dir_path=dir_path)
 
     # Apply given equalization filter
@@ -251,7 +254,7 @@ def correct_room(hrir, dir_path=None, room_target=None, room_mic_calibration=Non
         # Save figures
         for speaker, pair in figs.items():
             for side, fig in pair.items():
-                fig.savefig(os.path.join(dir_path, 'plots', 'room', f'{speaker}-{side}.png'))
+                fig.savefig(os.path.join(dir_path, 'plots', 'room', f'{speaker}-{side}.png'), bbox_inches='tight')
                 plt.close(fig)
 
     return rir
@@ -404,13 +407,14 @@ def create_cli():
     arg_parser.add_argument('--room_target', type=str,
                             help='Path to room target response AutoEQ style CSV file.')
     arg_parser.add_argument('--room_mic_calibration', type=str,
-                            help='Path to room measurement microphone calibration file. AutoEQ CSV files and MiniDSP'
-                                 'txt files are  supported.')
+                            help='Path to room measurement microphone calibration file.')
+    arg_parser.add_argument('--no_room_correction', action='store_false', dest='room_correction',
+                            help='Skip room correction.')
+    arg_parser.add_argument('--no_headphone_compensation', action='store_false', dest='headphone_compensation',
+                            help='Skip headphone compensation.')
     arg_parser.add_argument('--fs', type=int, help='Output sampling rate in Hertz.')
     arg_parser.add_argument('--plot', action='store_true', help='Plot graphs for debugging.')
     args = vars(arg_parser.parse_args())
-    if 'speakers' in args and args['speakers'] is not None:
-        args['speakers'] = args['speakers'].upper().split(',')
     return args
 
 
