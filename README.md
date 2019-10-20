@@ -230,7 +230,9 @@ measurement microphone in the exact same spot where the binaural microphones wer
 format of `room-<SPEAKERS>-<left|right>.wav`, where `<SPEAKERS>` is the comma separated list of speaker names and
 `<left|right>` is either "left" or "right". This tells if the measurement microphone is measuring at the left or right
 ear position. File name could be for example `room-FL,FR-left.wav`. Impulcifer does not support stereo measurement
-microphones because vast majority of measurement microphones are mono.
+microphones because vast majority of measurement microphones are mono. Room recording files need to be single track
+only. Some measurement microphones like MiniDSP UMIK-1 are seen as stereo microphones by Windows and will for that
+reason record a stereo file. `recorder.py` can force the capture to be one channel by setting `--channels=1`.
 
 Room measurements can be calibrated with the measurement microphone calibration file called `room-mic-calibration.txt`
 or `room-mic-calibration.csv`. This must be a CSV file where the first column contains frequencies and the second one
