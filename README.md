@@ -200,7 +200,7 @@ python impulcifer.py --test_signal="data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000H
 
 ## Processing
 Once you have obtained the sine sweep recordings, you can turn them into a HRIR file with Impulcifer. All the processing
-is done by running a single command on command line. The command below assumes you have made a speaker recording and
+is done by running a single command on command line. The command below assumes you have made a speaker recordings and
 a headphones recording and saved the recording files into `data/my_hrir` folder. Start command prompt, jump to
 Impulcifer folder and activate the virtual environment as described in the installation instructions if you don't have
 command prompt open yet. Sine sweep recordings are processed by running `impulcifer.py` with Python as shown below.
@@ -209,24 +209,42 @@ python impulcifer.py --test_signal="data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000H
 ```
 
 You should have several WAV files and graphs in the folder. `hesuvi.wav` can now be used with HeSuVi to make your
-headphones sound like speakers. Let's see what these arguments mean.
+headphones sound like speakers.
 
 `--dir_path=data/my_hrir` tells Impulcifer that the recordings can be found in a folder called `my_hrir` under `data`.
 Impulcifer will also write all the output files into this folder.
 
-`--test_signal=data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.pkl` tells Impulcifer that the inverse filter for
-deconvolution is this Pickle file. Alternative way is to provide a WAV file of the test signal and Impulcifer will
-load the file and construct inverse filter from the test signal. Inverse filter is used to turn sine sweep recordings
-into impulse responses. Seconds, bits, and Hertzes in the file name are actually not important and the file name can be
-anything. `--test` argument doesn't need to be supplied if the folder contains a file called `test.pkl` or `test.wav`.
+Impulcifer always needs to know which sine sweep signal was used during recording process. Test signal can be either a
+WAV (`.wav`) file or a Pickle (`.pkl`) file. Test signal is read from a file called `test.pkl` or `test.wav`. 
+`impulse_response_estimator.py` produces both but using a Pickle file is a bit faster. Pickle file however cannot be
+used with `recorder.py`. An alternative way of passing the test signal is with a command line argument `--test_signal`
+which takes is a path to the file eg. `--test_signal="data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.pkl"`.
 
-Various graphs can be produced by providing `--plot` parameter to Impulcifer. These can be helpful in figuring out what
-went wrong if the produced HRIR doesn't sound right. Producing the plots will take some time.
+Sine sweep recordings are read from WAV files which have speaker names separated with commas and `.wav` extension eg.
+`FL,FR.wav`. The individual speakers in the given file must be recorded in the order of the speaker names in the file
+name. There can be multiple files if the recording was done with multiple steps as is the case when recording 7.1 setup
+with two speakers. In that case there should be `FL,FR.wav`, `SR,BR.wav`, `BL,SL.wav` and `FC.wav` files in the folder.
 
-Sine sweep recordings are read from WAV files which have channel names separated with commas and `.wav` extension eg.
-`FL,FR.wav`. The individual speakers in the given file must recorded in the order of the speaker names in the file name.
-There can be multiple files if the recording was done with multiple steps as is the case when recording 7.1 setup with
-two speakers. In that case there should be `FL,FR.wav`, `SR,BR.wav`, `BL,SL.wav` and `FC.wav` files in the folder.
+Similar pattern is used for room acoustics measurements. The idea is to measure room response with a calibrated
+measurement microphone in the exact same spot where the binaural microphones were. Room measurement files have file name
+format of `room-<SPEAKERS>-<left|right>.wav`, where `<SPEAKERS>` is the comma separated list of speaker names and
+`<left|right>` is either "left" or "right". This tells if the measurement microphone is measuring at the left or right
+ear position. File name could be for example `room-FL,FR-left.wav`. Impulcifer does not support stereo measurement
+microphones because vast majority of measurement microphones are mono.
+
+Room measurements can be calibrated with the measurement microphone calibration file called `room-mic-calibration.txt`
+or `room-mic-calibration.csv`. This must be a CSV file where the first column contains frequencies and the second one
+amplitude data. Data is expected to be calibration data and not equalization data. This means that the calibration data
+is subtracted from the room frequency responses. An alternative way of passing in the measurement microphone calibration
+file is with a command line argument `--room_mic_calibration` and it takes a path to the file eg.
+`--room_mic_calibration="data/umik-1_90deg.txt"`
+
+Room frequency response target is read from a file called `room-target.txt` or `room-target.csv`. Head related impulse
+responses will be equalized with the difference between room response measurements and room response target. An
+alternative way to pass in the target file is with a command line argument `--room_target` eg.
+`--room_target="data/harman-room-target.csv"`.
+
+Room correction can be skipped by adding a command line argument `--no_room_correction` without any value.
 
 Impulcifer will compensate for the headphone frequency response using headphone sine sweep recording if the folder
 contains file called `headphones.wav`. If you have the file but would like not to have headphone compensation, you can
@@ -244,6 +262,11 @@ into the HRIR and you can enjoy speaker sound with your IEMs. You can generate t
 [AutoEQ](https://github.com/jaakkopasanen/AutoEq), see usage instructions for
 [using sound signatures](https://github.com/jaakkopasanen/AutoEq#using-sound-signatures) to learn how to transfer one
 headphone into another.
+
+Headphone compensation can be skipped by adding a command line argument `--no_headphone_compensation` without any value.
+
+Various graphs can be produced by providing `--plot` parameter to Impulcifer. These can be helpful in figuring out what
+went wrong if the produced HRIR doesn't sound right. Producing the plots will take some time.
 
 ## Contact
 [Issues](https://github.com/jaakkopasanen/AutoEq/issues) are the way to go if you are experiencing problems, have
