@@ -3,9 +3,7 @@
     <meta charset="utf-8">
     <meta http-equiv="x-ua-compatible" content="ie=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <!-- Name of your awesome camera app -->
-    <title>Camera App</title>
-    <!-- Link to your main style sheet-->
+    <title>Impulcifer</title>
     <style>
         html, body{
             margin: 0;
@@ -13,17 +11,37 @@
             height: 100%;
             width: 100%;
         }
-        #camera, #camera--view, #camera--sensor, #camera--output{
-            position: fixed;
-            height: 100%;
-            width: auto;
-            object-fit: cover;
+        body {
+            display: flex;
+            flex-direction: row;
         }
-        #camera--view, #camera--sensor, #camera--output{
+        #camera {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            width: calc(100vw - 19vh);
+            margin: 8px 0 8px 8px;
+            height: calc(100vh - 16px);
+            box-sizing: border-box;
+            overflow: hidden;
+            border-radius: 16px;
+        }
+        #shutter-wrapper {
+            width: 100%;
+            position: relative;
+        }
+        #shutter, #ghost {
             transform: scaleX(-1);
-            filter: FlipH;
+            position: absolute;
+            width: 100%;
+            box-sizing: border-box;
+            border-radius: 16px;
         }
-        #camera--trigger{
+        #ghost {
+            opacity: 0.5;
+        }
+        #trigger{
             width: 200px;
             background-color: black;
             color: white;
@@ -33,57 +51,106 @@
             padding: 15px 20px;
             text-align: center;
             box-shadow: 0 5px 10px 0 rgba(0,0,0,0.2);
-            position: fixed;
+            position: absolute;
             bottom: 30px;
             left: calc(50% - 100px);
         }
-        #camera--output.taken {
-            opacity: 0.5;
+        #snaps {
+            width: 19vh;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+        }
+        #snaps .snap {
+            transform: scaleX(-1);
+            box-sizing: border-box;
+            border-radius: 16px;
+            margin: 8px 8px 0 8px;
+            background-color: lightgray;
+            background-size: cover;
+            flex-grow: 1;
+        }
+        #snaps .snap img {
+            display: none;
+        }
+        #snaps .snap:last-child {
+            margin-bottom: 8px;
+        }
+        #snaps .snap.selected {
+            box-shadow: 0 0 3px 3px lightblue;
         }
     </style>
 </head>
 <body>
 <!-- Camera -->
 <div id="camera">
-    <!-- Camera sensor -->
-    <canvas id="camera--sensor"></canvas>
-    <!-- Camera view -->
-    <video id="camera--view" autoplay playsinline></video>
-    <!-- Camera output -->
-    <img src="//:0" alt="" id="camera--output">
-    <!-- Camera trigger -->
-    <button id="camera--trigger">Take a picture</button>
+    <div id="shutter-wrapper">
+        <video id="shutter" autoplay playsinline></video>
+        <canvas id="ghost"></canvas>
+    </div>
+    <button id="trigger">Take a picture</button>
+</div>
+<div id="snaps">
+    <div class="snap selected"><img src="//:0" /></div>
+    <div class="snap"><img src="//:0" /></div>
+    <div class="snap"><img src="//:0" /></div>
+    <div class="snap"><img src="//:0" /></div>
+    <div class="snap"><img src="//:0" /></div>
+    <div class="snap"><img src="//:0" /></div>
+    <div class="snap"><img src="//:0" /></div>
 </div>
 
 <!-- Reference to your JavaScript file -->
 <script>
     // Set constraints for the video stream
-    var constraints = { video: { facingMode: "user" }, audio: false };
+    let constraints = { video: { facingMode: "user" }, audio: false };
+
     // Define constants
-    const cameraView = document.querySelector("#camera--view"),
-        cameraOutput = document.querySelector("#camera--output"),
-        cameraSensor = document.querySelector("#camera--sensor"),
-        cameraTrigger = document.querySelector("#camera--trigger")
-    // Access the device camera and stream to cameraView
+    const shutter = document.querySelector("#shutter");
+    const ghost = document.querySelector("#ghost");
+    const trigger = document.querySelector("#trigger");
+    const snapImages = document.querySelectorAll("#snaps .snap");
+
+    function removeSelection (skipEl) {
+        snapImages.forEach((el) => {
+            if (el !== skipEl) {
+                el.classList.remove("selected");
+            }
+        });
+    }
+
+    snapImages.forEach((el) => {
+        el.onclick = () => {
+            removeSelection();
+            el.classList.add("selected");
+            ghost.width = shutter.videoWidth;
+            ghost.height = shutter.videoHeight;
+            ghost.getContext("2d").drawImage(el.getElementsByTagName("img")[0], 0, 0);
+        };
+    });
+
+    // Access the device camera and stream to camera
     function cameraStart() {
-        navigator.mediaDevices
-            .getUserMedia(constraints)
-            .then(function(stream) {
+        navigator.mediaDevices.getUserMedia(constraints).then(function(stream) {
             track = stream.getTracks()[0];
-            cameraView.srcObject = stream;
+            shutter.srcObject = stream;
         })
         .catch(function(error) {
             console.error("Oops. Something is broken.", error);
         });
     }
-    // Take a picture when cameraTrigger is tapped
-    cameraTrigger.onclick = function() {
-        cameraSensor.width = cameraView.videoWidth;
-        cameraSensor.height = cameraView.videoHeight;
-        cameraSensor.getContext("2d").drawImage(cameraView, 0, 0);
-        cameraOutput.src = cameraSensor.toDataURL("image/webp");
-        cameraOutput.classList.add("taken");
+
+    // Take a picture when trigger is tapped
+    trigger.onclick = function() {
+        ghost.width = shutter.videoWidth;
+        ghost.height = shutter.videoHeight;
+        ghost.getContext("2d").drawImage(shutter, 0, 0);
+        let dataUrl = ghost.toDataURL("image/webp");
+        let snap = document.querySelector("#snaps .snap.selected");
+        snap.style.backgroundImage = 'url("' + dataUrl + '")';
+        snap.getElementsByTagName("img")[0].src = dataUrl;
     };
+
     // Start the video stream when the window loads
     window.addEventListener("load", cameraStart, false);
 </script>
