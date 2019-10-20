@@ -6,4 +6,4 @@ soundfile~=0.10.2
 sounddevice~=0.3.14
 nnresample~=0.2.4
 tabulate~=0.8.5
-git+https://github.com/jaakkopasanen/autoeq-pkg@1.0.1
+git+https://github.com/jaakkopasanen/autoeq-pkg@1.0.2

@@ -12,6 +12,7 @@ from scipy.interpolate import InterpolatedUnivariateSpline
 from scipy.signal.windows import hann
 from scipy.ndimage import uniform_filter
 import nnresample
+from copy import deepcopy
 from autoeq.frequency_response import FrequencyResponse
 from utils import magnitude_response
 
@@ -21,6 +22,9 @@ class ImpulseResponse:
         self.fs = fs
         self.data = data
         self.recording = recording
+
+    def copy(self):
+        return deepcopy(self)
 
     def __len__(self):
         """Impulse response length in samples."""
@@ -367,15 +371,16 @@ class ImpulseResponse:
         """
         if fr is None:
             fr = self.frequency_response()
-            fr.smoothen_fractional_octave(
-                window_size=1 / 3,
-                iterations=1,
-                treble_window_size=1 / 6,
-                treble_iterations=1,
-                treble_f_lower=100,
-                treble_f_upper=1000,
-
-            )
+            # fr.smoothen_fractional_octave(
+            #     window_size=1 / 3,
+            #     iterations=1,
+            #     treble_window_size=1 / 6,
+            #     treble_iterations=1,
+            #     treble_f_lower=100,
+            #     treble_f_upper=1000,
+            #
+            # )
+            fr.smoothen_fractional_octave(window_size=1/3, treble_f_lower=20000, treble_f_upper=23999)
         if fig is None:
             fig, ax = plt.subplots()
         ax.set_xlabel('Frequency (Hz)')

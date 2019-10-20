@@ -84,8 +84,7 @@ def main(dir_path=None,
 
     # Compensate headphones
     if os.path.isfile(headphones):
-        fig_path = os.path.join(dir_path, 'plots', f'Headphones.png') if plot else None
-        compensate_headphones(headphones, hrir, fig_path=fig_path)
+        compensate_headphones(headphones, hrir, dir_path=dir_path)
 
     # Apply given equalization filter
     if os.path.isfile(eq):
@@ -221,7 +220,7 @@ def correct_room(hrir, dir_path=None, room_target=None, room_mic_calibration=Non
             fir_gain = 10**((ref_gain - gain) / 20)
 
             # TODO: Some alien-tech mixed phase filter
-            fir = fr.minimum_phase_impulse_response()
+            fir = fr.minimum_phase_impulse_response(fs=rir.fs, f_res=4)
             fir *= fir_gain
             # Add SPL change from distance
             fir *= 10**(IR_ROOM_SPL[speaker][side] / 20)
@@ -255,13 +254,13 @@ def correct_room(hrir, dir_path=None, room_target=None, room_mic_calibration=Non
     return rir
 
 
-def compensate_headphones(recording, hrir, fig_path=None):
+def compensate_headphones(recording, hrir, dir_path=None):
     """Equalizes HRIR tracks with headphone compensation measurement.
 
     Args:
         recording: File path to sine sweep recording made with headphones
         hrir: HRIR instance for the speaker measurements
-        fig_path: File path for saving graphs
+        dir_path: Path to output directory
 
     Returns:
         None
@@ -269,6 +268,7 @@ def compensate_headphones(recording, hrir, fig_path=None):
     # Read WAV file
     hp_irs = HRIR(hrir.estimator)
     hp_irs.open_recording(recording, speakers=['FL', 'FR'])
+    hp_irs.write_wav(os.path.join(dir_path, 'headphone-responses.wav'))
     hp_irs = [hp_irs.irs['FL']['left'], hp_irs.irs['FR']['right']]
 
     firs = []
@@ -304,7 +304,7 @@ def compensate_headphones(recording, hrir, fig_path=None):
         fr.equalized_raw = fr.raw + fr.equalization
         frs.append(fr)
         # Create minimum phase FIR filter
-        eq_ir = fr.minimum_phase_impulse_response(fs=hrir.fs, f_res=10)
+        eq_ir = fr.minimum_phase_impulse_response(fs=hrir.fs, f_res=4)
         firs.append(ImpulseResponse(eq_ir, hrir.fs))
         # Calculate bias
         avg = np.mean(fr.equalized_raw[np.logical_and(fr.frequency >= 100, fr.frequency <= 10000)])
@@ -324,7 +324,7 @@ def compensate_headphones(recording, hrir, fig_path=None):
         frs[1].equalization += biases[0] - biases[1]
         frs[1].equalized_raw += biases[0] - biases[1]
 
-    if fig_path is not None:
+    if dir_path is not None:
         # Headphone plots
         fig, ax = plt.subplots(1, 2)
         fig.set_size_inches(15, 7)
@@ -335,7 +335,7 @@ def compensate_headphones(recording, hrir, fig_path=None):
         # Sync axes
         sync_axes([ax[0], ax[1]])
         # Save headphone plots
-        fig.savefig(fig_path)
+        fig.savefig(os.path.join(dir_path, 'plots', 'Headphones.png'))
         plt.close(fig)
 
     # Equalize HRIR with headphone compensation FIR filters
