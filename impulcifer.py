@@ -161,15 +161,15 @@ def correct_room(hrir, dir_path=None, room_target=None, room_mic_calibration=Non
     # Room target
     if room_target is None:
         room_target = os.path.join(dir_path, 'room-target.csv')
-        if os.path.isfile(room_target):
-            # File exists, create frequency response
-            room_target = FrequencyResponse.read_from_csv(room_target)
-            room_target.interpolate()
-            room_target.center()
-        else:
-            # No room target specified, use flat
-            room_target = FrequencyResponse(name='room-target')
-            room_target.raw = np.zeros(room_target.frequency.shape)
+    if os.path.isfile(room_target):
+        # File exists, create frequency response
+        room_target = FrequencyResponse.read_from_csv(room_target)
+        room_target.interpolate()
+        room_target.center()
+    else:
+        # No room target specified, use flat
+        room_target = FrequencyResponse(name='room-target')
+        room_target.raw = np.zeros(room_target.frequency.shape)
 
     # Room measurement microphone calibration
     if room_mic_calibration is None:
