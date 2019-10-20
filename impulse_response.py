@@ -290,7 +290,7 @@ class ImpulseResponse:
 
         # Create spectrogram image
         t, f = np.meshgrid(t, f)
-        cs = ax.pcolormesh(t, f, z, cmap='gnuplot2')
+        cs = ax.pcolormesh(t, f, z, cmap='gnuplot2', vmin=-150)
 
         divider = make_axes_locatable(ax)
         cax = divider.append_axes('right', size='5%', pad=0.05)
@@ -371,15 +371,6 @@ class ImpulseResponse:
         """
         if fr is None:
             fr = self.frequency_response()
-            # fr.smoothen_fractional_octave(
-            #     window_size=1 / 3,
-            #     iterations=1,
-            #     treble_window_size=1 / 6,
-            #     treble_iterations=1,
-            #     treble_f_lower=100,
-            #     treble_f_upper=1000,
-            #
-            # )
             fr.smoothen_fractional_octave(window_size=1/3, treble_f_lower=20000, treble_f_upper=23999)
         if fig is None:
             fig, ax = plt.subplots()

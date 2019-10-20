@@ -6,6 +6,7 @@ import argparse
 from tabulate import tabulate
 from datetime import datetime
 import numpy as np
+from scipy import signal
 import matplotlib.pyplot as plt
 from autoeq.frequency_response import FrequencyResponse
 from impulse_response_estimator import ImpulseResponseEstimator
@@ -93,19 +94,22 @@ def main(dir_path=None,
             raise ValueError('Equalization FIR filter sampling rate must match HRIR sampling rate.')
         hrir.equalize(firs)
 
-    # Re-sample
-    if fs is not None and fs != hrir.fs:
-        hrir.resample(fs)
-
     # Normalize gain
     hrir.normalize(target_db=0)
 
     if plot:
+        # Convolve test signal, re-plot waveform and spectrogram
+        for speaker, pair in hrir.irs.items():
+            for side, ir in pair.items():
+                ir.recording = signal.convolve(estimator.test_signal, ir.data, mode='full')
         # Plot post processing
-        # TODO: Convolve test signal, re-plot waveform and spectrogram
         hrir.plot(os.path.join(dir_path, 'plots', 'post'))
         # Plot results
         hrir.plot_result(os.path.join(dir_path, 'plots'))
+
+    # Re-sample
+    if fs is not None and fs != hrir.fs:
+        hrir.resample(fs)
 
     # Write multi-channel WAV file with standard track order
     hrir.write_wav(os.path.join(dir_path, 'hrir.wav'))
