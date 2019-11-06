@@ -27,7 +27,7 @@ through installing everything that is needed to run Impulcifer on you own PC.
 
 - Download and install Git: https://git-scm.com/downloads. When installing Git on Windows, use Windows SSL verification
 instead of Open SSL or you might run into problems when installing project dependencies.
-- Download and install 64-bit [Python3](https://www.python.org/getit/). Make sure to check
+- Download and install 64-bit [Python 3](https://www.python.org/getit/). Python 3.8 doesn't work yet. Make sure to check
 *Add Python 3 to PATH*.
 
 Rest will be done in terminal / command prompt. On Windows you'll find it by searching `cmd` in Start menu.
