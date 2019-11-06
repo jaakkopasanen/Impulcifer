@@ -454,8 +454,9 @@ class ImpulseResponse:
         z_min = -100
 
         # Window
-        nfft = min(int(self.fs * 0.3), int(len(self.data) / 10))  # 300 ms or 1/10 of ir length
-        noverlap = int(nfft * 0.9)  # 90% overlap
+        window_duration = 0.05  # TODO
+        nfft = min(int(self.fs * window_duration), int(len(self.data) / 10))
+        noverlap = int(nfft * 0.9)  # 90% overlap TODO
         ascend_ms = 10  # 10 ms ascending window
         ascend = int(ascend_ms / 1000 * self.fs)
         plateu = int((nfft - ascend) * 3 / 4)  # 75%

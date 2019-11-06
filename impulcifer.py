@@ -22,8 +22,8 @@ def main(dir_path=None,
          room_mic_calibration=None,
          fs=None,
          plot=False,
-         room_correction=True,
-         headphone_compensation=True):
+         do_room_correction=True,
+         do_headphone_compensation=True):
     """"""
     if dir_path is None or not os.path.isdir(dir_path):
         raise NotADirectoryError(f'Given dir path "{dir_path}"" is not a directory.')
@@ -45,6 +45,10 @@ def main(dir_path=None,
         estimator = ImpulseResponseEstimator.from_pickle(test_signal)
     else:
         raise TypeError(f'Unknown file extension for test signal "{test_signal}"')
+
+    # Compensate headphones
+    if os.path.isfile(headphones) and do_headphone_compensation:
+        headphone_firs = headphone_compensation(headphones, estimator, dir_path=dir_path)
 
     # HRIR measurements
     hrir = HRIR(estimator)
@@ -77,7 +81,7 @@ def main(dir_path=None,
     hrir.crop_tails()
 
     # Room correction
-    if room_correction:
+    if do_room_correction:
         correct_room(
             hrir,
             dir_path=dir_path,
@@ -86,9 +90,8 @@ def main(dir_path=None,
             plot=plot
         )
 
-    # Compensate headphones
-    if os.path.isfile(headphones) and headphone_compensation:
-        compensate_headphones(headphones, hrir, dir_path=dir_path)
+    if headphone_firs is not None:
+        hrir.equalize(headphone_firs)
 
     # Apply given equalization filter
     if os.path.isfile(eq):
@@ -260,19 +263,19 @@ def correct_room(hrir, dir_path=None, room_target=None, room_mic_calibration=Non
     return rir
 
 
-def compensate_headphones(recording, hrir, dir_path=None):
+def headphone_compensation(recording, estimator, dir_path=None):
     """Equalizes HRIR tracks with headphone compensation measurement.
 
     Args:
         recording: File path to sine sweep recording made with headphones
-        hrir: HRIR instance for the speaker measurements
+        estimator: ImpulseResponseEstimator instance
         dir_path: Path to output directory
 
     Returns:
         None
     """
     # Read WAV file
-    hp_irs = HRIR(hrir.estimator)
+    hp_irs = HRIR(estimator)
     hp_irs.open_recording(recording, speakers=['FL', 'FR'])
     hp_irs.write_wav(os.path.join(dir_path, 'headphone-responses.wav'))
     hp_irs = [hp_irs.irs['FL']['left'], hp_irs.irs['FR']['right']]
@@ -310,8 +313,8 @@ def compensate_headphones(recording, hrir, dir_path=None):
         fr.equalized_raw = fr.raw + fr.equalization
         frs.append(fr)
         # Create minimum phase FIR filter
-        eq_ir = fr.minimum_phase_impulse_response(fs=hrir.fs, f_res=4)
-        firs.append(ImpulseResponse(eq_ir, hrir.fs))
+        eq_ir = fr.minimum_phase_impulse_response(fs=estimator.fs, f_res=4)
+        firs.append(ImpulseResponse(eq_ir, estimator.fs))
         # Calculate bias
         avg = np.mean(fr.equalized_raw[np.logical_and(fr.frequency >= 100, fr.frequency <= 10000)])
         biases.append(avg)
@@ -341,11 +344,11 @@ def compensate_headphones(recording, hrir, dir_path=None):
         # Sync axes
         sync_axes([ax[0], ax[1]])
         # Save headphone plots
+        os.makedirs(os.path.join(dir_path, 'plots'), exist_ok=True)
         fig.savefig(os.path.join(dir_path, 'plots', 'Headphones.png'))
         plt.close(fig)
 
-    # Equalize HRIR with headphone compensation FIR filters
-    hrir.equalize(firs)
+    return firs
 
 
 def write_readme(file_path, hrir, fs):
@@ -408,9 +411,9 @@ def create_cli():
                             help='Path to room target response AutoEQ style CSV file.')
     arg_parser.add_argument('--room_mic_calibration', type=str,
                             help='Path to room measurement microphone calibration file.')
-    arg_parser.add_argument('--no_room_correction', action='store_false', dest='room_correction',
+    arg_parser.add_argument('--no_room_correction', action='store_false', dest='do_room_correction',
                             help='Skip room correction.')
-    arg_parser.add_argument('--no_headphone_compensation', action='store_false', dest='headphone_compensation',
+    arg_parser.add_argument('--no_headphone_compensation', action='store_false', dest='do_headphone_compensation',
                             help='Skip headphone compensation.')
     arg_parser.add_argument('--fs', type=int, help='Output sampling rate in Hertz.')
     arg_parser.add_argument('--plot', action='store_true', help='Plot graphs for debugging.')
