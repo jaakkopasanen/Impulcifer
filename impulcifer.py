@@ -465,9 +465,7 @@ def create_cli():
                                  'frequency response. "left" equalize right side to left side fr, "right" equalize '
                                  'left side to right side fr, "avg" will equalize both to the average fr, "min" will '
                                  'equalize both to the minimum of left and right side frs. Number values will boost or '
-                                 'attenuate right side relative to left side by the number of dBs. If channel balance '
-                                 'correction is required the recommended value is "min" because this will avoid narrow '
-                                 'spikes in the eq curve.')
+                                 'attenuate right side relative to left side by the number of dBs.')
     args = vars(arg_parser.parse_args())
     return args
 

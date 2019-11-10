@@ -232,11 +232,11 @@ class HRIR:
         """Channel balance correction by equalizing left and right ear results to the same frequency response.
 
             Args:
-                method: "left" equalize right side to left side fr, "right" equalize left side to right side fr, "avg" will
-                        equalize both to the average fr, "min" will equalize both to the minimum of left and right side frs.
-                        Number values will boost or attenuate right side relative to left side by the number of dBs. If channel
-                        balance correction is required the recommended value is "min" because this will avoid narrow spikes in
-                        the eq curve.
+                method: "left" equalize right side to left side fr, "right" equalize left side to right side fr, "avg"
+                        equalizes both to the average fr, "min" equalizes both to the minimum of left and right side
+                        frs. Numerical values will boost or attenuate right side relative to left side by that number of
+                        dBs. If channel balance correction is required the recommended value is "min" because this will
+                        mostly avoid narrow spikes in the eq curve.
 
             Returns:
                 Two FIR filters as numpy arrays where the first row is for left side and the second row is for right side
@@ -280,12 +280,11 @@ class HRIR:
                 firs = [signal.unit_impulse((len(fir))), fir]
             else:
                 firs = [fir, signal.unit_impulse((len(fir)))]
-            subj.plot_graph(raw=False, error=False)
 
         elif method == 'avg' or method == 'min':
             # Center around 0 dB
-            left_gain = left_fr.copy().center([100, 20000])
-            right_gain = right_fr.copy().center([100, 20000])
+            left_gain = left_fr.copy().center([100, 10000])
+            right_gain = right_fr.copy().center([100, 10000])
             gain = (left_gain + right_gain) / 2
             left_fr.raw += gain
             right_fr.raw += gain
