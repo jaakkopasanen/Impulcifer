@@ -225,7 +225,7 @@ Sine sweep recordings are read from WAV files which have speaker names separated
 name. There can be multiple files if the recording was done with multiple steps as is the case when recording 7.1 setup
 with two speakers. In that case there should be `FL,FR.wav`, `SR,BR.wav`, `BL,SL.wav` and `FC.wav` files in the folder.
 
-##### Room Correction
+#### Room Correction
 Similar pattern is used for room acoustics measurements. The idea is to measure room response with a calibrated
 measurement microphone in the exact same spot where the binaural microphones were. Room measurement files have file name
 format of `room-<SPEAKERS>-<left|right>.wav`, where `<SPEAKERS>` is the comma separated list of speaker names and
@@ -249,7 +249,7 @@ alternative way to pass in the target file is with a command line argument `--ro
 
 Room correction can be skipped by adding a command line argument `--no_room_correction` without any value.
 
-##### Headphone Compensation
+#### Headphone Compensation
 Impulcifer will compensate for the headphone frequency response using headphone sine sweep recording if the folder
 contains file called `headphones.wav`. If you have the file but would like not to have headphone compensation, you can
 simply rename the file for example as `headphones.wav.bak` and run the command again. 
@@ -269,16 +269,16 @@ headphone into another.
 
 Headphone compensation can be skipped by adding a command line argument `--no_headphone_compensation` without any value.
 
-##### Sampling Rate
+#### Sampling Rate
 Outputs with different sampling rates than the recording sampling rate can be produced with `--fs` parameter. This
 parameter takes a sampling rate in Hertz as value and will then resample the output HRIR to the desired sampling rate if
 the recording and output sampling rates differ. For example `--fs=44100`.
 
-##### Plotting Graphs
+#### Plotting Graphs
 Various graphs can be produced by providing `--plot` parameter to Impulcifer. These can be helpful in figuring out what
 went wrong if the produced HRIR doesn't sound right. Producing the plots will take some time.
 
-##### Channel Balance Correction
+#### Channel Balance Correction
 Channel balance can be corrected with `--channel_balance` parameter. In ideal case this would not be needed and the
 natural channel balance after headphone equalization and room correction would be perfect but this is not always the
 case since there are multiple factors which affect that like placement of the binaural microphones. There are four
