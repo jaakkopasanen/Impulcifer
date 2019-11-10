@@ -24,6 +24,7 @@ def main(dir_path=None,
          room_mic_calibration=None,
          fs=None,
          plot=False,
+         channel_balance=None,
          do_room_correction=True,
          do_headphone_compensation=True):
     """"""
@@ -103,6 +104,11 @@ def main(dir_path=None,
             raise ValueError('Equalization FIR filter sampling rate must match HRIR sampling rate.')
         hrir.equalize(firs)
 
+    # Correct channel balance
+    if channel_balance is not None:
+        balancer_irs = hrir.channel_balance(channel_balance)
+        hrir.equalize(balancer_irs)
+
     # Normalize gain
     hrir.normalize(target_db=0)
 
@@ -113,8 +119,9 @@ def main(dir_path=None,
                 ir.recording = signal.convolve(estimator.test_signal, ir.data, mode='full')
         # Plot post processing
         hrir.plot(os.path.join(dir_path, 'plots', 'post'))
-        # Plot results
-        hrir.plot_result(os.path.join(dir_path, 'plots'))
+
+    # Plot results, always
+    hrir.plot_result(os.path.join(dir_path, 'plots'))
 
     # Re-sample
     if fs is not None and fs != hrir.fs:
@@ -440,19 +447,27 @@ def write_readme(file_path, hrir, fs):
 
 def create_cli():
     arg_parser = argparse.ArgumentParser()
-    arg_parser.add_argument('--dir_path', type=str, help='Path to directory for recordings and outputs.')
-    arg_parser.add_argument('--test_signal', type=str,
+    arg_parser.add_argument('--dir_path', type=str, required=True, help='Path to directory for recordings and outputs.')
+    arg_parser.add_argument('--test_signal', type=str, default=argparse.SUPPRESS,
                             help='Path to sine sweep test signal or pickled impulse response estimator.')
-    arg_parser.add_argument('--room_target', type=str,
+    arg_parser.add_argument('--room_target', type=str, default=argparse.SUPPRESS,
                             help='Path to room target response AutoEQ style CSV file.')
-    arg_parser.add_argument('--room_mic_calibration', type=str,
+    arg_parser.add_argument('--room_mic_calibration', type=str, default=argparse.SUPPRESS,
                             help='Path to room measurement microphone calibration file.')
     arg_parser.add_argument('--no_room_correction', action='store_false', dest='do_room_correction',
                             help='Skip room correction.')
     arg_parser.add_argument('--no_headphone_compensation', action='store_false', dest='do_headphone_compensation',
                             help='Skip headphone compensation.')
-    arg_parser.add_argument('--fs', type=int, help='Output sampling rate in Hertz.')
+    arg_parser.add_argument('--fs', type=int, default=argparse.SUPPRESS, help='Output sampling rate in Hertz.')
     arg_parser.add_argument('--plot', action='store_true', help='Plot graphs for debugging.')
+    arg_parser.add_argument('--channel_balance', type=str, default=argparse.SUPPRESS,
+                            help='Channel balance correction by equalizing left and right ear results to the same '
+                                 'frequency response. "left" equalize right side to left side fr, "right" equalize '
+                                 'left side to right side fr, "avg" will equalize both to the average fr, "min" will '
+                                 'equalize both to the minimum of left and right side frs. Number values will boost or '
+                                 'attenuate right side relative to left side by the number of dBs. If channel balance '
+                                 'correction is required the recommended value is "min" because this will avoid narrow '
+                                 'spikes in the eq curve.')
     args = vars(arg_parser.parse_args())
     return args
 

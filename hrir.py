@@ -228,6 +228,100 @@ class HRIR:
                 ir.data = ir.data[:tail_ind]
                 ir.data *= np.concatenate([np.ones(len(ir.data) - len(window)), window])
 
+    def channel_balance(self, method):
+        """Channel balance correction by equalizing left and right ear results to the same frequency response.
+
+            Args:
+                method: "left" equalize right side to left side fr, "right" equalize left side to right side fr, "avg" will
+                        equalize both to the average fr, "min" will equalize both to the minimum of left and right side frs.
+                        Number values will boost or attenuate right side relative to left side by the number of dBs. If channel
+                        balance correction is required the recommended value is "min" because this will avoid narrow spikes in
+                        the eq curve.
+
+            Returns:
+                Two FIR filters as numpy arrays where the first row is for left side and the second row is for right side
+            """
+        # Create frequency responses for left and right side IRs
+        stacks = [[], []]
+        for speaker, pair in self.irs.items():
+            for i, ir in enumerate(pair.values()):
+                stacks[i].append(ir.data)
+
+        left = ImpulseResponse(np.sum(np.vstack(stacks[0]), axis=0), self.fs)
+        left_fr = left.frequency_response()
+        right = ImpulseResponse(np.sum(np.vstack(stacks[1]), axis=0), self.fs)
+        right_fr = right.frequency_response()
+
+        if method == 'left' or method == 'right':
+            if method == 'left':
+                ref = left_fr
+                subj = right_fr
+            else:
+                ref = right_fr
+                subj = left_fr
+
+            # Smoothen reference
+            ref.smoothen_fractional_octave(
+                window_size=1 / 3,
+                treble_f_lower=20000,
+                treble_f_upper=int(round(self.fs / 2))
+            )
+            # Center around 0 dB
+            gain = ref.center([100, 10000])
+            subj.raw += gain
+            # Compensate and equalize to left
+            subj.target = ref.smoothed
+            subj.error = subj.raw - subj.target
+            subj.smoothen_heavy_light()
+            subj.equalize(max_gain=15, treble_f_lower=20000, treble_f_upper=self.fs / 2)
+            # Unit impulse for left side and equalization FIR filter for right side
+            fir = subj.minimum_phase_impulse_response(fs=self.fs, normalize=False)
+            if method == 'left':
+                firs = [signal.unit_impulse((len(fir))), fir]
+            else:
+                firs = [fir, signal.unit_impulse((len(fir)))]
+            subj.plot_graph(raw=False, error=False)
+
+        elif method == 'avg' or method == 'min':
+            # Center around 0 dB
+            left_gain = left_fr.copy().center([100, 20000])
+            right_gain = right_fr.copy().center([100, 20000])
+            gain = (left_gain + right_gain) / 2
+            left_fr.raw += gain
+            right_fr.raw += gain
+
+            # Smoothen
+            left_fr.smoothen_fractional_octave(window_size=1 / 3, treble_f_lower=20000, treble_f_upper=23999)
+            right_fr.smoothen_fractional_octave(window_size=1 / 3, treble_f_lower=20000, treble_f_upper=23999)
+
+            # Target
+            if method == 'avg':
+                # Target is the average between the two FRs
+                target = (left_fr.raw + right_fr.raw) / 2
+            else:
+                # Target is the  frequency-vise minimum of the two FRs
+                target = np.min([left_fr.raw, right_fr.raw], axis=0)
+
+            # Compensate and equalize both to the target
+            firs = []
+            for fr in [left_fr, right_fr]:
+                fr.target = target.copy()
+                fr.error = fr.raw - fr.target
+                fr.smoothen_fractional_octave(window_size=1 / 3, treble_f_lower=20000, treble_f_upper=23999)
+                fr.equalize(max_gain=15, treble_f_lower=2000, treble_f_upper=self.fs / 2)
+                firs.append(fr.minimum_phase_impulse_response(fs=self.fs, normalize=False))
+
+        else:
+            # Must be numerical value
+            try:
+                gain = 10 ** (float(method) / 20)
+                n = int(round(self.fs * 0.1))  # 100 ms
+                firs = [signal.unit_impulse(n), signal.unit_impulse(n) * gain]
+            except ValueError:
+                raise ValueError(f'"{method}" is not valid value for channel balance method.')
+
+        return np.vstack(firs)
+
     def plot(self,
              dir_path=None,
              plot_recording=True,

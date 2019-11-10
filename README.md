@@ -225,6 +225,7 @@ Sine sweep recordings are read from WAV files which have speaker names separated
 name. There can be multiple files if the recording was done with multiple steps as is the case when recording 7.1 setup
 with two speakers. In that case there should be `FL,FR.wav`, `SR,BR.wav`, `BL,SL.wav` and `FC.wav` files in the folder.
 
+##### Room Correction
 Similar pattern is used for room acoustics measurements. The idea is to measure room response with a calibrated
 measurement microphone in the exact same spot where the binaural microphones were. Room measurement files have file name
 format of `room-<SPEAKERS>-<left|right>.wav`, where `<SPEAKERS>` is the comma separated list of speaker names and
@@ -248,9 +249,10 @@ alternative way to pass in the target file is with a command line argument `--ro
 
 Room correction can be skipped by adding a command line argument `--no_room_correction` without any value.
 
+##### Headphone Compensation
 Impulcifer will compensate for the headphone frequency response using headphone sine sweep recording if the folder
 contains file called `headphones.wav`. If you have the file but would like not to have headphone compensation, you can
-simply rename the file for example as `headphones.wav.bak` and run the command again.
+simply rename the file for example as `headphones.wav.bak` and run the command again. 
 
 Headphone equalization can be baked into the produced HRIR file by having a file called `eq.wav` in the folder. The eq 
 file must be a WAV file containing one or two FIR filter tracks. When there are two tracks in the file the first track
@@ -267,8 +269,26 @@ headphone into another.
 
 Headphone compensation can be skipped by adding a command line argument `--no_headphone_compensation` without any value.
 
+##### Sampling Rate
+Outputs with different sampling rates than the recording sampling rate can be produced with `--fs` parameter. This
+parameter takes a sampling rate in Hertz as value and will then resample the output HRIR to the desired sampling rate if
+the recording and output sampling rates differ. For example `--fs=44100`.
+
+##### Plotting Graphs
 Various graphs can be produced by providing `--plot` parameter to Impulcifer. These can be helpful in figuring out what
 went wrong if the produced HRIR doesn't sound right. Producing the plots will take some time.
+
+##### Channel Balance Correction
+Channel balance can be corrected with `--channel_balance` parameter. In ideal case this would not be needed and the
+natural channel balance after headphone equalization and room correction would be perfect but this is not always the
+case since there are multiple factors which affect that like placement of the binaural microphones. There are four
+different strategies available for channel balance correction. `--channel_balance=left` will equalize right side IRs
+to have the same frequency response as left side IRs and `--channel_balance=right` will do the same in reverse. Setting
+`--channel_balance=avg` will equalize both left and right sides to the their average frequency response and
+`--channel_balance=min` will equalize them to the minimum of the left and right side frequency response curves. Using
+minimum instead of average will be better for avoiding narrow spikes in the equalization curve but which is better in
+the end varies case by case. Finally setting `--channel_balance=1.4` or any numerical value will amplify right side IRs
+by that number of decibels. Positive values will boost right side and negative values will attenuate right side.
 
 ## Contact
 [Issues](https://github.com/jaakkopasanen/AutoEq/issues) are the way to go if you are experiencing problems, have
