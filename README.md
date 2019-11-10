@@ -284,19 +284,19 @@ natural channel balance after headphone equalization and room correction would b
 case since there are multiple factors which affect that like placement of the binaural microphones. There are four
 different strategies available for channel balance correction.
 
+Numerical value strategy might provide the best results because it won't warp the frequency response which can lead to
+weird sensation when listening. Minimum strategy is a solid option in most cases and doesn't require manual tweaking.
+
 Setting `--channel_balance=1.4` or any numerical value will amplify right side IRs by that number of decibels.
 Positive values will boost right side and negative values will attenuate right side. You can find the correct value by
 trial and error either with Impulcifer or your virtualization software and running Impulcifer again with the best value.
 Typically vocals or speech is good reference for finding the right side gain value because these are most often mixed
 in the center and therefore are the most important aspect of channel balance.
 
-Numerical value strategy might be the best one because it won't warp the frequency response which can lead to weird
-sensation when listening. 
-
 Setting `--channel_balance=avg` will equalize both left and right sides to the their average frequency response and
 `--channel_balance=min` will equalize them to the minimum of the left and right side frequency response curves. Using
 minimum instead of average will be better for avoiding narrow spikes in the equalization curve but which is better in
-the end varies case by case. Minimum strategy is a solid, robust and easy option in many cases.
+the end varies case by case.
 
 `--channel_balance=left` will equalize right side IRs to have the same frequency response as left side IRs and
 `--channel_balance=right` will do the same in reverse.
