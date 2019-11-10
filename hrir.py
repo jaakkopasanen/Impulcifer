@@ -252,7 +252,6 @@ class HRIR:
                     plot_decay=plot_decay,
                     plot_waterfall=plot_waterfall
                 )
-                fig.set_size_inches(22, 10)
                 figs[speaker][side] = fig
 
         # Synchronize axes limits

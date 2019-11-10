@@ -8,6 +8,8 @@ from datetime import datetime
 import numpy as np
 from scipy import signal
 import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
+from PIL import Image
 from autoeq.frequency_response import FrequencyResponse
 from impulse_response_estimator import ImpulseResponseEstimator
 from hrir import HRIR
@@ -47,6 +49,7 @@ def main(dir_path=None,
         raise TypeError(f'Unknown file extension for test signal "{test_signal}"')
 
     # Compensate headphones
+    headphone_firs = None
     if os.path.isfile(headphones) and do_headphone_compensation:
         headphone_firs = headphone_compensation(headphones, estimator, dir_path=dir_path)
 
@@ -335,18 +338,47 @@ def headphone_compensation(recording, estimator, dir_path=None):
 
     if dir_path is not None:
         # Headphone plots
-        fig, ax = plt.subplots(1, 2)
-        fig.set_size_inches(15, 7)
+        fig = plt.figure()
+        gs = fig.add_gridspec(2, 3)
+        fig.set_size_inches(22, 10)
         fig.suptitle('Headphones')
-        for i, side in enumerate(['Left', 'Right']):
-            frs[i].plot_graph(fig=fig, ax=ax[i], show=False)
-            ax[i].set_title(side)
+
+        # Left
+        axl = fig.add_subplot(gs[0, 0])
+        frs[0].plot_graph(fig=fig, ax=axl, show=False)
+        axl.set_title('Left')
+        # Right
+        axr = fig.add_subplot(gs[1, 0])
+        frs[1].plot_graph(fig=fig, ax=axr, show=False)
+        axr.set_title('Right')
         # Sync axes
-        sync_axes([ax[0], ax[1]])
+        sync_axes([axl, axr])
+
+        # Combined
+        frs[0].center([100, 10000])
+        frs[1].center([100, 10000])
+        ax = fig.add_subplot(gs[:, 1:])
+        ax.plot(frs[0].frequency, frs[0].raw, linewidth=1, color='#1f77b4')
+        ax.plot(frs[1].frequency, frs[1].raw, linewidth=1, color='#d62728')
+        ax.set_title('Comparison')
+        ax.legend(['Left raw', 'Right raw', 'Left smoothed', 'Right smoothed'], fontsize=8)
+        ax.set_xlabel('Frequency (Hz)')
+        ax.semilogx()
+        ax.set_xlim([20, 20000])
+        ax.set_ylabel('Amplitude (dBr)')
+        ax.grid(True, which='major')
+        ax.grid(True, which='minor')
+        ax.xaxis.set_major_formatter(ticker.StrMethodFormatter('{x:.0f}'))
+
         # Save headphone plots
         os.makedirs(os.path.join(dir_path, 'plots'), exist_ok=True)
-        fig.savefig(os.path.join(dir_path, 'plots', 'Headphones.png'))
+        file_path = os.path.join(dir_path, 'plots', 'Headphones.png')
+        fig.savefig(file_path, bbox_inches='tight')
         plt.close(fig)
+        # Optimize file size
+        im = Image.open(file_path)
+        im = im.convert('P', palette=Image.ADAPTIVE, colors=60)
+        im.save(file_path, optimize=True)
 
     return firs
 

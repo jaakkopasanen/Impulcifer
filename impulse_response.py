@@ -205,6 +205,7 @@ class ImpulseResponse:
         if fig is None:
             # Create figure and axises for the plots
             fig = plt.figure()
+            fig.set_size_inches(22, 10)
             ax = []
             for i in range(5):
                 ax.append(fig.add_subplot(2, 3, i + 1))
