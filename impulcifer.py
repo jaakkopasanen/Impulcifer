@@ -204,6 +204,7 @@ def correct_room(hrir, dir_path=None, room_target=None, room_mic_calibration=Non
 
     # Create equalization filters and equalize
     ref_gain = None
+    fr_axes = []
     for speaker, pair in rir.irs.items():
         for side, ir in pair.items():
             fr = ir.frequency_response()
@@ -241,7 +242,7 @@ def correct_room(hrir, dir_path=None, room_target=None, room_mic_calibration=Non
 
             if plot:
                 file_path = os.path.join(dir_path, 'plots', 'room', f'{speaker}-{side}.png')
-                ir.plot_fr(
+                _, fr_ax = ir.plot_fr(
                     fr=fr,
                     fig=figs[speaker][side],
                     ax=figs[speaker][side].get_axes()[4],
@@ -249,19 +250,21 @@ def correct_room(hrir, dir_path=None, room_target=None, room_mic_calibration=Non
                     plot_error=False,
                     plot_file_path=file_path
                 )
+                fr_axes.append(fr_ax)
 
     if plot:
         # Sync FR plot axes
-        axes = []
-        for speaker, pair in figs.items():
-            for side, fig in pair.items():
-                axes.append(fig.get_axes()[5])
-        sync_axes(axes)
+        sync_axes(fr_axes)
         # Save figures
         for speaker, pair in figs.items():
             for side, fig in pair.items():
-                fig.savefig(os.path.join(dir_path, 'plots', 'room', f'{speaker}-{side}.png'), bbox_inches='tight')
+                file_path = os.path.join(dir_path, 'plots', 'room', f'{speaker}-{side}.png')
+                fig.savefig(file_path, bbox_inches='tight')
                 plt.close(fig)
+                # Optimize file size
+                im = Image.open(file_path)
+                im = im.convert('P', palette=Image.ADAPTIVE, colors=60)
+                im.save(file_path, optimize=True)
 
     return rir
 
@@ -360,8 +363,9 @@ def headphone_compensation(recording, estimator, dir_path=None):
         ax = fig.add_subplot(gs[:, 1:])
         ax.plot(frs[0].frequency, frs[0].raw, linewidth=1, color='#1f77b4')
         ax.plot(frs[1].frequency, frs[1].raw, linewidth=1, color='#d62728')
+        ax.plot(frs[0].frequency, frs[0].raw - frs[1].raw, linewidth=1, color='#680fb9')
         ax.set_title('Comparison')
-        ax.legend(['Left raw', 'Right raw', 'Left smoothed', 'Right smoothed'], fontsize=8)
+        ax.legend(['Left raw', 'Right raw', 'Difference'], fontsize=8)
         ax.set_xlabel('Frequency (Hz)')
         ax.semilogx()
         ax.set_xlim([20, 20000])

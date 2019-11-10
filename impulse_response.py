@@ -345,12 +345,19 @@ class ImpulseResponse:
                 ax=None,
                 plot_file_path=None,
                 plot_raw=True,
+                raw_color='#7db4db',
                 plot_smoothed=True,
+                smoothed_color='#1f77b4',
                 plot_error=True,
+                error_color='#dd8081',
                 plot_error_smoothed=True,
+                error_smoothed_color='#d62728',
                 plot_target=True,
+                target_color='#ecdef9',
                 plot_equalization=True,
-                plot_equalized=True):
+                equalization_color='#2ca02c',
+                plot_equalized=True,
+                equalized_color='#680fb9'):
         """Plots frequency response
 
         Args:
@@ -359,12 +366,19 @@ class ImpulseResponse:
             ax: Axes instance
             plot_file_path: Path to a file for saving the plot
             plot_raw: Include raw curve?
+            raw_color: Color of raw curve
             plot_smoothed: Include smoothed curve?
+            smoothed_color: Color of smoothed curve
             plot_error: Include unsmoothed error curve?
+            error_color: Color of error curve
             plot_error_smoothed: Include smoothed error curve?
+            error_smoothed_color: Color of smoothed error curve
             plot_target: Include target curve?
+            target_color: Color of target curve
             plot_equalization: Include equalization curve?
+            equalization_color: Color of equalization curve
             plot_equalized: Include equalized curve?
+            equalized_color: Color of equalized curve
 
         Returns:
             - Figure
@@ -386,28 +400,28 @@ class ImpulseResponse:
         legend = []
 
         if plot_target and len(fr.target):
-            ax.plot(fr.frequency, fr.target, linewidth=5, color='#ecdef9')
+            ax.plot(fr.frequency, fr.target, linewidth=5, color=target_color)
             legend.append('Target')
         if plot_raw and len(fr.raw):
-            ax.plot(fr.frequency, fr.raw, linewidth=0.5, color='#7db4db')
+            ax.plot(fr.frequency, fr.raw, linewidth=0.5, color=raw_color)
             legend.append('Raw')
         if plot_error and len(fr.error):
-            ax.plot(fr.frequency, fr.error, linewidth=0.5, color='#dd8081')
+            ax.plot(fr.frequency, fr.error, linewidth=0.5, color=error_color)
             legend.append('Error')
         if plot_smoothed and len(fr.smoothed):
-            ax.plot(fr.frequency, fr.smoothed, linewidth=1, color='#1f77b4')
+            ax.plot(fr.frequency, fr.smoothed, linewidth=1, color=smoothed_color)
             legend.append('Raw Smoothed')
         if plot_error_smoothed and len(fr.error_smoothed):
-            ax.plot(fr.frequency, fr.error_smoothed, linewidth=1, color='#d62728')
+            ax.plot(fr.frequency, fr.error_smoothed, linewidth=1, color=error_smoothed_color)
             legend.append('Error Smoothed')
         if plot_equalization and len(fr.equalization):
-            ax.plot(fr.frequency, fr.equalization, linewidth=1, color='#2ca02c')
+            ax.plot(fr.frequency, fr.equalization, linewidth=1, color=equalization_color)
             legend.append('Equalization')
         if plot_equalized and len(fr.equalized_raw) and not len(fr.equalized_smoothed):
-            ax.plot(fr.frequency, fr.equalized_raw, linewidth=1, color='#680fb9')
+            ax.plot(fr.frequency, fr.equalized_raw, linewidth=1, color=equalized_color)
             legend.append('Equalized raw')
         if plot_equalized and len(fr.equalized_smoothed):
-            ax.plot(fr.frequency, fr.equalized_smoothed, linewidth=1, color='#680fb9')
+            ax.plot(fr.frequency, fr.equalized_smoothed, linewidth=1, color=equalized_color)
             legend.append('Equalized smoothed')
 
         ax.legend(legend, fontsize=8)

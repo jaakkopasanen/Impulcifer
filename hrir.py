@@ -255,12 +255,15 @@ class HRIR:
                 figs[speaker][side] = fig
 
         # Synchronize axes limits
+        plot_flags = [plot_recording, plot_ir, plot_decay, plot_spectrogram, plot_fr, plot_waterfall]
         for r in range(2):
             for c in range(3):
+                if not plot_flags[r * 3 + c]:
+                    continue
                 axes = []
                 for speaker, pair in figs.items():
                     for side, fig in pair.items():
-                        axes.append(fig.get_axes()[r * c])
+                        axes.append(fig.get_axes()[r * 3 + c])
                 sync_axes(axes)
 
         # Show write figures to files
@@ -296,18 +299,30 @@ class HRIR:
         for speaker, pair in self.irs.items():
             for i, ir in enumerate(pair.values()):
                 stacks[i].append(ir.data)
-        fig, ax = plt.subplots(1, 2)
-        fig.set_size_inches(14, 6)
-        for i, side in enumerate(['Left', 'Right']):
-            data = np.sum(np.vstack(stacks[i]), axis=0)
-            ir = ImpulseResponse(data, self.fs)
-            ir.plot_fr(fig=fig, ax=ax[i])
+        left = ImpulseResponse(np.sum(np.vstack(stacks[0]), axis=0), self.fs)
+        left_fr = left.frequency_response()
+        left_fr.smoothen_fractional_octave(window_size=1 / 3, treble_f_lower=20000, treble_f_upper=23999)
+        right = ImpulseResponse(np.sum(np.vstack(stacks[1]), axis=0), self.fs)
+        right_fr = right.frequency_response()
+        right_fr.smoothen_fractional_octave(window_size=1 / 3, treble_f_lower=20000, treble_f_upper=23999)
 
-        # Sync axes
-        sync_axes(ax)
+        fig, ax = plt.subplots()
+        fig.set_size_inches(12, 9)
+        left.plot_fr(fig=fig, ax=ax, fr=left_fr, plot_raw=True, raw_color='#7db4db', plot_smoothed=False)
+        right.plot_fr(fig=fig, ax=ax, fr=right_fr, plot_raw=True, raw_color='#dd8081', plot_smoothed=False)
+        left.plot_fr(fig=fig, ax=ax, fr=left_fr, plot_smoothed=True, smoothed_color='#1f77b4', plot_raw=False)
+        right.plot_fr(fig=fig, ax=ax, fr=right_fr, plot_smoothed=True, smoothed_color='#d62728', plot_raw=False)
+        ax.plot(left_fr.frequency, left_fr.smoothed - right_fr.smoothed, color='#680fb9')
+        ax.legend(['Left raw', 'Right raw', 'Left smoothed', 'Right smoothed', 'Difference'])
 
         # Save figures
-        fig.savefig(os.path.join(dir_path, f'Results.png'), bbox_inches='tight')
+        file_path = os.path.join(dir_path, f'Results.png')
+        fig.savefig(file_path, bbox_inches='tight')
+        plt.close(fig)
+        # Optimize file size
+        im = Image.open(file_path)
+        im = im.convert('P', palette=Image.ADAPTIVE, colors=60)
+        im.save(file_path, optimize=True)
 
     def equalize(self, fir):
         """Equalizes all impulse responses with given FIR filters.
