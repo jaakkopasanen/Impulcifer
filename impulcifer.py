@@ -237,13 +237,13 @@ def correct_room(hrir, dir_path=None, room_target=None, room_mic_calibration=Non
             gain = np.mean(original[sl] + fr.equalization[sl])
             if ref_gain is None:
                 ref_gain = gain
-            fir_gain = 10**((ref_gain - gain) / 20)
+            fir_gain = ref_gain - gain
+            fir_gain += IR_ROOM_SPL[speaker][side]
+            fir_gain = 10**(fir_gain / 20)
 
             # TODO: Some alien-tech mixed phase filter
-            fir = fr.minimum_phase_impulse_response(fs=rir.fs, f_res=4)
+            fir = fr.minimum_phase_impulse_response(fs=rir.fs, f_res=4, normalize=False)
             fir *= fir_gain
-            # Add SPL change from distance
-            fir *= 10**(IR_ROOM_SPL[speaker][side] / 20)
             # Equalize
             hrir.irs[speaker][side].equalize(fir)
 
@@ -258,6 +258,19 @@ def correct_room(hrir, dir_path=None, room_target=None, room_mic_calibration=Non
                     plot_file_path=file_path
                 )
                 fr_axes.append(fr_ax)
+
+    # Zero pad all IRs to same length
+    # TODO: Check delay sync with mixed phase filter
+    lengths = []
+    for speaker, pair in hrir.irs.items():
+        for side, ir in pair.items():
+            lengths.append(len(ir))
+    n = max(lengths)
+    for speaker, pair in hrir.irs.items():
+        for side, ir in pair.items():
+            pad = n - len(ir)
+            if pad > 0:
+                ir.data = np.concatenate([ir.data, np.zeros((pad,))])
 
     if plot:
         # Sync FR plot axes
