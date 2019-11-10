@@ -281,11 +281,15 @@ went wrong if the produced HRIR doesn't sound right. Producing the plots will ta
 #### Channel Balance Correction
 Channel balance can be corrected with `--channel_balance` parameter. In ideal case this would not be needed and the
 natural channel balance after headphone equalization and room correction would be perfect but this is not always the
-case since there are multiple factors which affect that like placement of the binaural microphones. There are four
+case since there are multiple factors which affect that like placement of the binaural microphones. There are six
 different strategies available for channel balance correction.
 
 Numerical value strategy might provide the best results because it won't warp the frequency response which can lead to
-weird sensation when listening. Minimum strategy is a solid option in most cases and doesn't require manual tweaking.
+weird sensation when listening. An easier alternative to numerical strategy is mids strategy which does it
+automatically.
+
+Using `--channel_balance=mids` will find a gain level for right side which makes the mid frequencies (100, 3000)
+average level match that of the left side. This is essentially an automatic guess for the numeric strategy value.
 
 Setting `--channel_balance=1.4` or any numerical value will amplify right side IRs by that number of decibels.
 Positive values will boost right side and negative values will attenuate right side. You can find the correct value by

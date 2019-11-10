@@ -252,7 +252,15 @@ class HRIR:
         right = ImpulseResponse(np.sum(np.vstack(stacks[1]), axis=0), self.fs)
         right_fr = right.frequency_response()
 
-        if method == 'left' or method == 'right':
+        if method == 'mids':
+            # Find gain for right side
+            # R diff - L diff = L mean - R mean
+            gain = right_fr.copy().center([100, 3000]) - left_fr.copy().center([100, 3000])
+            gain = 10 ** (gain / 20)
+            n = int(round(self.fs * 0.1))  # 100 ms
+            firs = [signal.unit_impulse(n), signal.unit_impulse(n) * gain]
+
+        elif method == 'left' or method == 'right':
             if method == 'left':
                 ref = left_fr
                 subj = right_fr

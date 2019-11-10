@@ -475,10 +475,12 @@ def create_cli():
     arg_parser.add_argument('--plot', action='store_true', help='Plot graphs for debugging.')
     arg_parser.add_argument('--channel_balance', type=str, default=argparse.SUPPRESS,
                             help='Channel balance correction by equalizing left and right ear results to the same '
-                                 'frequency response. "left" equalize right side to left side fr, "right" equalize '
-                                 'left side to right side fr, "avg" will equalize both to the average fr, "min" will '
+                                 'frequency response. "left" equalizes right side to left side fr, "right" equalizes '
+                                 'left side to right side fr, "avg" equalizes both to the average fr, "min" will '
                                  'equalize both to the minimum of left and right side frs. Number values will boost or '
-                                 'attenuate right side relative to left side by the number of dBs.')
+                                 'attenuate right side relative to left side by the number of dBs. "mids" is the same '
+                                 'as the numerical values but guesses the value automatically from mid frequency '
+                                 'levels.')
     args = vars(arg_parser.parse_args())
     return args
 
