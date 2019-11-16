@@ -30,10 +30,12 @@ def main():
     for i, location in enumerate(['rear', 'center', 'front']):
         for j, side in enumerate(['left', 'right']):
             # Frequency responses
-            ccl = responses[f'closed-{location}'][side].frequency_response()
-            ccl.smoothen_fractional_octave(window_size=1 / 3, treble_f_lower=20000, treble_f_upper=23999)
-            ocl = responses[f'open-{location}'][side].frequency_response()
-            ocl.smoothen_fractional_octave(window_size=1 / 3, treble_f_lower=20000, treble_f_upper=23999)
+            cl = responses[f'closed-{location}'][side].frequency_response()
+            cl.smoothen_fractional_octave(window_size=1 / 3, treble_f_lower=20000, treble_f_upper=23999)
+            op = responses[f'open-{location}'][side].frequency_response()
+            op.smoothen_fractional_octave(window_size=1 / 3, treble_f_lower=20000, treble_f_upper=23999)
+            pl = responses[f'plugged-{location}'][side].frequency_response()
+            pl.smoothen_fractional_octave(window_size=1 / 3, treble_f_lower=20000, treble_f_upper=23999)
 
             # Plot
             ax = axs[i, j]
@@ -46,9 +48,10 @@ def main():
             ax.grid(True, which='minor')
             ax.xaxis.set_major_formatter(ticker.StrMethodFormatter('{x:.0f}'))
 
-            ax.plot(ccl.frequency, ccl.smoothed, color='#1f77b4')
-            ax.plot(ocl.frequency, ocl.smoothed, '-.', color='#1f77b4')
-            ax.legend([f'Closed {location} {side}', f'Open {location} {side}'])
+            ax.plot(cl.frequency, cl.smoothed, color='#1f77b4')
+            ax.plot(op.frequency, op.smoothed, '--', color='#1f77b4')
+            ax.plot(pl.frequency, pl.smoothed, '-.', color='#1f77b4')
+            ax.legend([f'Closed {location} {side}', f'Open {location} {side}', f'Plugged {location} {side}'])
 
     file_path = os.path.join(DIR_PATH, 'Results.png')
     fig.savefig(file_path, bbox_inches='tight')
