@@ -284,11 +284,12 @@ natural channel balance after headphone equalization and room correction would b
 case since there are multiple factors which affect that like placement of the binaural microphones. There are six
 different strategies available for channel balance correction.
 
-Numerical value strategy might provide the best results because it won't warp the frequency response which can lead to
-weird sensation when listening. An easier alternative to numerical strategy is mids strategy which does it
-automatically.
+Setting `--channel_balance=trend` will equalize right side by the difference trend of left and right sides. This is a
+very smooth difference curve over the entire spectrum. Trend will not affect small deviations and therefore doesn't
+warp the frequency response which could lead to uncanny sensations. Bass, mids and treble are all centered when using
+trend. Trend is probably the best choice in most situations.
 
-Using `--channel_balance=mids` will find a gain level for right side which makes the mid frequencies (100, 3000)
+Setting `--channel_balance=mids` will find a gain level for right side which makes the mid frequencies (100, 3000)
 average level match that of the left side. This is essentially an automatic guess for the numeric strategy value.
 
 Setting `--channel_balance=1.4` or any numerical value will amplify right side IRs by that number of decibels.
@@ -300,10 +301,11 @@ in the center and therefore are the most important aspect of channel balance.
 Setting `--channel_balance=avg` will equalize both left and right sides to the their average frequency response and
 `--channel_balance=min` will equalize them to the minimum of the left and right side frequency response curves. Using
 minimum instead of average will be better for avoiding narrow spikes in the equalization curve but which is better in
-the end varies case by case.
+the end varies case by case. These strategies might cause uncanny sensation because of frequency response warping.
 
 `--channel_balance=left` will equalize right side IRs to have the same frequency response as left side IRs and
-`--channel_balance=right` will do the same in reverse.
+`--channel_balance=right` will do the same in reverse. These strategies might cause uncanny sensation because of
+frequency response warping.
 
 ## Contact
 [Issues](https://github.com/jaakkopasanen/AutoEq/issues) are the way to go if you are experiencing problems, have

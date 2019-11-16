@@ -6,6 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy import signal
 from PIL import Image
+from autoeq.frequency_response import FrequencyResponse
 from impulse_response import ImpulseResponse
 from utils import read_wav, write_wav, magnitude_response, sync_axes
 from constants import SPEAKER_NAMES, SPEAKER_DELAYS, IR_ORDER
@@ -260,6 +261,20 @@ class HRIR:
             n = int(round(self.fs * 0.1))  # 100 ms
             firs = [signal.unit_impulse(n), signal.unit_impulse(n) * gain]
 
+        elif method == 'trend':
+            trend = FrequencyResponse(name='trend', frequency=left_fr.frequency, raw=left_fr.raw - right_fr.raw)
+            trend.smoothen_fractional_octave(
+                window_size=2,
+                treble_f_lower=20000,
+                treble_f_upper=int(round(self.fs / 2))
+            )
+            trend.plot_graph()
+            # Trend is the equalization target
+            right_fr.equalization = trend.smoothed
+            # Unit impulse for left side and equalization FIR filter for right side
+            fir = right_fr.minimum_phase_impulse_response(fs=self.fs, normalize=False)
+            firs = [signal.unit_impulse((len(fir))), fir]
+
         elif method == 'left' or method == 'right':
             if method == 'left':
                 ref = left_fr
@@ -277,7 +292,7 @@ class HRIR:
             # Center around 0 dB
             gain = ref.center([100, 10000])
             subj.raw += gain
-            # Compensate and equalize to left
+            # Compensate and equalize to reference
             subj.target = ref.smoothed
             subj.error = subj.raw - subj.target
             subj.smoothen_heavy_light()
