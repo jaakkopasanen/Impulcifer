@@ -268,7 +268,6 @@ class HRIR:
                 treble_f_lower=20000,
                 treble_f_upper=int(round(self.fs / 2))
             )
-            trend.plot_graph()
             # Trend is the equalization target
             right_fr.equalization = trend.smoothed
             # Unit impulse for left side and equalization FIR filter for right side
