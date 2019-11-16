@@ -4,6 +4,7 @@ import os
 import numpy as np
 import soundfile as sf
 from scipy.fftpack import fft
+from PIL import Image
 
 
 def read_wav(file_path, expand=False):
@@ -141,3 +142,17 @@ def versus_distance(angle=30, distance=3, breadth=0.148, ear='primary', sound_fi
     else:
         raise ValueError('Sound field must be "reverberant", "free" or "diffuse".')
     return d, delay, spl
+
+
+def optimize_png_size(file_path, n_colors=60):
+    """Optimizes PNG file size in place.
+
+    Args:
+        file_path: Path to image
+
+    Returns:
+        None
+    """
+    im = Image.open(file_path)
+    im = im.convert('P', palette=Image.ADAPTIVE, colors=n_colors)
+    im.save(file_path, optimize=True)
