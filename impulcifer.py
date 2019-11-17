@@ -186,7 +186,9 @@ def correct_room(hrir, dir_path=None, room_target=None, room_mic_calibration=Non
 
     # Room measurement microphone calibration
     if room_mic_calibration is None:
-        room_mic_calibration = os.path.join(dir_path, 'room-mic-calibration.txt')
+        room_mic_calibration = os.path.join(dir_path, 'room-mic-calibration.csv')
+        if not os.path.isfile(room_mic_calibration):
+            room_mic_calibration = os.path.join(dir_path, 'room-mic-calibration.txt')
         if os.path.isfile(room_mic_calibration):
             # File found, create frequency response
             room_mic_calibration = FrequencyResponse.read_from_csv(room_mic_calibration)

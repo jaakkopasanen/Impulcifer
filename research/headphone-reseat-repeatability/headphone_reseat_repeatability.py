@@ -12,7 +12,6 @@ from impulse_response import ImpulseResponse
 from utils import read_wav, optimize_png_size, sync_axes
 
 DIR_PATH = os.path.abspath(os.path.join(__file__, os.pardir))
-TEST_SIGNAL = os.path.join(DIR_PATH, 'sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.pkl')
 
 
 def main():
