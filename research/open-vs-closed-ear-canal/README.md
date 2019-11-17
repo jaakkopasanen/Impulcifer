@@ -12,3 +12,9 @@ measurements better capture the 5-6 kHz peak of Sennheiser HD 800. However it's 
 the ear canal openness and how much is due to the mic placement. Mics were placed carefully at the same location at the
 ear canal opening but still small differences in placement can have significant variation in the measured frequency
 response.
+
+Plugged measurements show level reduction by 3 to 4 dB and in some cases have significant dampening in 8 to 10 kHz
+region. Other than that they are quite similar to the closed ear canal measurements and don't exhibit the 4 kHz notch
+of open ear canal measurements.
+
+![results](https://i.imgur.com/JumzxZT.png)
