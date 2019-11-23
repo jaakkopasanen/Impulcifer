@@ -176,7 +176,7 @@ def correct_room(hrir, dir_path=None, room_target=None, room_mic_calibration=Non
     if os.path.isfile(room_target):
         # File exists, create frequency response
         room_target = FrequencyResponse.read_from_csv(room_target)
-        room_target.interpolate()
+        room_target.interpolate(f_step=1.05, f_min=10, f_max=hrir.fs / 2)
         room_target.center()
     else:
         # No room target specified, use flat
@@ -191,7 +191,7 @@ def correct_room(hrir, dir_path=None, room_target=None, room_mic_calibration=Non
         if os.path.isfile(room_mic_calibration):
             # File found, create frequency response
             room_mic_calibration = FrequencyResponse.read_from_csv(room_mic_calibration)
-            room_mic_calibration.interpolate()
+            room_mic_calibration.interpolate(f_step=1.05, f_min=10, f_max=hrir.fs / 2)
             room_mic_calibration.center()
         else:
             room_mic_calibration = None
@@ -216,6 +216,8 @@ def correct_room(hrir, dir_path=None, room_target=None, room_mic_calibration=Non
     for speaker, pair in rir.irs.items():
         for side, ir in pair.items():
             fr = ir.frequency_response()
+            fr.interpolate(f_step=1.05, f_min=10, f_max=hrir.fs / 2)
+
             if room_mic_calibration is not None:
                 # Calibrate frequency response
                 fr.raw -= room_mic_calibration.raw
@@ -224,11 +226,12 @@ def correct_room(hrir, dir_path=None, room_target=None, room_mic_calibration=Non
             original = fr.raw.copy()
 
             # Process
-            fr.process(
-                compensation=room_target,
-                min_mean_error=True,
-                equalize=True,
+            fr.center()
+            fr.compensate(room_target, min_mean_error=True)
+            fr.smoothen_heavy_light()
+            fr.equalize(
                 max_gain=30,
+                smoothen=True,
                 treble_f_lower=10000,
                 treble_f_upper=20000
             )

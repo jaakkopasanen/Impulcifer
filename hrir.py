@@ -374,7 +374,7 @@ class HRIR:
             # Assign to speakers in EQ HRIR
             for speaker in speakers:
                 self.irs[speaker]['left'].equalize(firs[0])
-                self.irs[speaker]['right'].equalize(firs[1  ])
+                self.irs[speaker]['right'].equalize(firs[1])
 
         return eqir
 

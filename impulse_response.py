@@ -173,7 +173,7 @@ class ImpulseResponse:
         n = self.fs / 2 / 4  # 4 Hz resolution
         step = int(len(f) / n)
         fr = FrequencyResponse(name='Frequency response', frequency=f[1::step], raw=m[1::step])
-        fr.interpolate()
+        fr.interpolate(f_step=1.01, f_min=10, f_max=self.fs / 2)
         return fr
 
     def plot(self,
@@ -391,7 +391,7 @@ class ImpulseResponse:
             fig, ax = plt.subplots()
         ax.set_xlabel('Frequency (Hz)')
         ax.semilogx()
-        ax.set_xlim([20, 20e3])
+        ax.set_xlim([10, 20e3])
         ax.set_ylabel('Amplitude (dB)')
         ax.set_title(fr.name)
         ax.grid(True, which='major')
@@ -486,7 +486,8 @@ class ImpulseResponse:
         peak_ind = self.peak_index()
         tail_ind = self.tail_index()
         start = max(int(peak_ind - self.fs * 0.01), 0)
-        stop = min(tail_ind + nfft, len(self.data))
+        # Stop index is greater of 1s after peak or 1 FFT window after tail
+        stop = min(int(round(max(peak_ind + self.fs * 1, tail_ind + nfft))), len(self.data))
         data = self.data[start:stop]
 
         # Get spectrogram data
