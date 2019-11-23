@@ -43,7 +43,7 @@ git clone https://github.com/jaakkopasanen/Impulcifer
 ```
 - Go to Impulcifer folder.  
 ```bash
-cd Implucifer
+cd Impulcifer
 ```
 - Create virtual environment for the project.  
 ```bash
@@ -67,7 +67,7 @@ python impulcifer.py --help
 
 When coming back at a later time you'll only need to activate virtual environment again before using Impulcifer.
 ```bash
-cd Implucifer
+cd Impulcifer
 # On Windows
 venv\Scripts\activate
 # On Mac and Linux
