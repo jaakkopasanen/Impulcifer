@@ -106,8 +106,7 @@ def main(dir_path=None,
 
     # Correct channel balance
     if channel_balance is not None:
-        balancer_irs = hrir.channel_balance(channel_balance)
-        hrir.equalize(balancer_irs)
+        hrir.correct_channel_balance(channel_balance)
 
     # Normalize gain
     hrir.normalize(target_db=0)

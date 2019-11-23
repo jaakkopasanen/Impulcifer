@@ -69,6 +69,9 @@ def main(test_signal):
         frequency=rooms[0].frequency,
         raw=np.mean(np.vstack([x.raw for x in rooms]), axis=0)
     )
+    room.smoothen_fractional_octave(window_size=1/6, treble_window_size=1/6)
+    room.raw = room.smoothed.copy()
+    room.smoothed = []
     room.center([60, 10000])
     ax.plot(room.frequency, room.raw, color='#680fb9', linewidth=0.5)
 
@@ -78,6 +81,9 @@ def main(test_signal):
         frequency=lefts[0].frequency,
         raw=np.mean(np.vstack([x.raw for x in lefts]), axis=0)
     )
+    left.smoothen_fractional_octave(window_size=1/6, treble_window_size=1/6)
+    left.raw = left.smoothed.copy()
+    left.smoothed = []
     gain = left.center([60, 10000])
     ax.plot(left.frequency, left.raw, color='#7db4db', linewidth=0.5)
     ax.plot(left.frequency, left.raw - room.raw, color='#1f77b4')
@@ -89,6 +95,9 @@ def main(test_signal):
         frequency=rights[0].frequency,
         raw=np.mean(np.vstack([x.raw for x in rights]), axis=0)
     )
+    right.smoothen_fractional_octave(window_size=1/6, treble_window_size=1/6)
+    right.raw = right.smoothed.copy()
+    right.smoothed = []
     right.raw += gain
     ax.plot(right.frequency, right.raw, color='#dd8081', linewidth=0.5)
     ax.plot(right.frequency, right.raw - room.raw, color='#d62728')

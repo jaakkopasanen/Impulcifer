@@ -229,30 +229,21 @@ class HRIR:
                 ir.data = ir.data[:tail_ind]
                 ir.data *= np.concatenate([np.ones(len(ir.data) - len(window)), window])
 
-    def channel_balance(self, method):
-        """Channel balance correction by equalizing left and right ear results to the same frequency response.
+    def channel_balance_firs(self, left_fr, right_fr, method):
+        """Creates FIR filters for correcting channel balance
 
-            Args:
-                method: "left" equalize right side to left side fr, "right" equalize left side to right side fr, "avg"
-                        equalizes both to the average fr, "min" equalizes both to the minimum of left and right side
-                        frs. Numerical values will boost or attenuate right side relative to left side by that number of
-                        dBs. If channel balance correction is required the recommended value is "min" because this will
-                        mostly avoid narrow spikes in the eq curve.
+        Args:
+            left_fr: Left side FrequencyResponse instance
+            right_fr: Right side FrequencyResponse instance
+            method: "trend" equalizes right side by the difference trend of right and left side. "left" equalizes
+                    right side to left side fr, "right" equalizes left side to right side fr, "avg" equalizes both
+                    to the average fr, "min" equalizes both to the minimum of left and right side frs. Number
+                    values will boost or attenuate right side relative to left side by the number of dBs. "mids" is
+                    the same as the numerical values but guesses the value automatically from mid frequency levels.
 
-            Returns:
-                Two FIR filters as numpy arrays where the first row is for left side and the second row is for right side
-            """
-        # Create frequency responses for left and right side IRs
-        stacks = [[], []]
-        for speaker, pair in self.irs.items():
-            for i, ir in enumerate(pair.values()):
-                stacks[i].append(ir.data)
-
-        left = ImpulseResponse(np.sum(np.vstack(stacks[0]), axis=0), self.fs)
-        left_fr = left.frequency_response()
-        right = ImpulseResponse(np.sum(np.vstack(stacks[1]), axis=0), self.fs)
-        right_fr = right.frequency_response()
-
+        Returns:
+            List of two FIR filters as numpy arrays, first for left and second for right
+        """
         if method == 'mids':
             # Find gain for right side
             # R diff - L diff = L mean - R mean
@@ -341,7 +332,51 @@ class HRIR:
             except ValueError:
                 raise ValueError(f'"{method}" is not valid value for channel balance method.')
 
-        return np.vstack(firs)
+        return firs
+
+    def correct_channel_balance(self, method):
+        """Channel balance correction by equalizing left and right ear results to the same frequency response.
+
+            Args:
+                method: "trend" equalizes right side by the difference trend of right and left side. "left" equalizes
+                        right side to left side fr, "right" equalizes left side to right side fr, "avg" equalizes both
+                        to the average fr, "min" equalizes both to the minimum of left and right side frs. Number
+                        values will boost or attenuate right side relative to left side by the number of dBs. "mids" is
+                        the same as the numerical values but guesses the value automatically from mid frequency levels.
+
+            Returns:
+                HRIR with FIR filter for equalizing each speaker-side
+            """
+        # Create frequency responses for left and right side IRs
+        stacks = [[], []]
+        for speaker, pair in self.irs.items():
+            if speaker not in ['FL', 'FR']:
+                continue
+            for i, ir in enumerate(pair.values()):
+                stacks[i].append(ir.data)
+
+        # Group the same left and right side speakers
+        eqir = HRIR(self.estimator)
+        for speakers in [['FC'], ['FL', 'FR'], ['SL', 'SR'], ['BL', 'BR']]:
+            if len([ch for ch in speakers if ch in self.irs]) < len(speakers):
+                # All the speakers in the current speaker group must exist, otherwise balancing makes no sense
+                continue
+            # Stack impulse responses
+            left, right = [], []
+            for speaker in speakers:
+                left.append(self.irs[speaker]['left'].data)
+                right.append(self.irs[speaker]['right'].data)
+            # Create frequency responses
+            left_fr = ImpulseResponse(np.mean(np.vstack(left), axis=0), self.fs).frequency_response()
+            right_fr = ImpulseResponse(np.mean(np.vstack(right), axis=0), self.fs).frequency_response()
+            # Create EQ FIR filters
+            firs = self.channel_balance_firs(left_fr, right_fr, method)
+            # Assign to speakers in EQ HRIR
+            for speaker in speakers:
+                self.irs[speaker]['left'].equalize(firs[0])
+                self.irs[speaker]['right'].equalize(firs[1  ])
+
+        return eqir
 
     def plot(self,
              dir_path=None,
