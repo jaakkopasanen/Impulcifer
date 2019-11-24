@@ -39,17 +39,21 @@ def main():
     # Virtual room target is Harman room target and the difference between Harman flat speaker in room and over-ear
     virtual_room_target = room_target.copy()
     virtual_room_target.raw += over_ear.error
+    virtual_room_target_light = room_target.copy()
+    virtual_room_target_light.raw[virtual_room_target.frequency > 1000] += over_ear.error[over_ear.frequency > 1000]
 
     # Save room targets
     room_target.write_to_csv(os.path.join(DIR_PATH, 'harman-room-target.csv'))
     virtual_room_target.write_to_csv(os.path.join(DIR_PATH, 'virtual-room-target.csv'))
+    virtual_room_target_light.write_to_csv(os.path.join(DIR_PATH, 'virtual-room-target-light.csv'))
 
     # Plot
     fig, ax = over_ear.plot_graph(show=False)
     room_target.plot_graph(fig=fig, ax=ax, show=False, color='#1f77b4')
     virtual_room_target.plot_graph(fig=fig, ax=ax, show=False, color='#680fb9')
+    virtual_room_target_light.plot_graph(fig=fig, ax=ax, show=False, color='#c17dff')
     plt.legend(['Harman flat loudspeaker in room', 'Harman over-ear 2018', 'Difference', 'Harman room target',
-                'Virtual room target'])
+                'Virtual room target', 'Virtual room target light'])
     plt.xlim([10, 20000])
     plt.ylim([-65, 15])
     plt.title('Virtual Room Target')

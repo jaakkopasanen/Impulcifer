@@ -7,4 +7,6 @@ loudspeaker in  response.
 It is still unclear if the Harman room target already contains the slight warm tilt of from the difference or not. But
 one clear difference is the 2.5 dB reduction at 3 kHz.
 
+Light version of the virtual room target doesn't include the boost below 1 kHz.
+
 ![results](https://i.imgur.com/RlQ2pMm.png)
