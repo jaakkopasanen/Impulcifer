@@ -9,4 +9,4 @@ one clear difference is the 2.5 dB reduction at 3 kHz.
 
 Light version of the virtual room target doesn't include the boost below 1 kHz.
 
-![results](https://i.imgur.com/RlQ2pMm.png)
+![results](https://i.imgur.com/Gq3wwHB.png)
