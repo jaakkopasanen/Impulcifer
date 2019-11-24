@@ -188,13 +188,15 @@ def correct_room(hrir, dir_path=None, room_target=None, room_mic_calibration=Non
         room_mic_calibration = os.path.join(dir_path, 'room-mic-calibration.csv')
         if not os.path.isfile(room_mic_calibration):
             room_mic_calibration = os.path.join(dir_path, 'room-mic-calibration.txt')
-        if os.path.isfile(room_mic_calibration):
-            # File found, create frequency response
-            room_mic_calibration = FrequencyResponse.read_from_csv(room_mic_calibration)
-            room_mic_calibration.interpolate(f_step=1.05, f_min=10, f_max=hrir.fs / 2)
-            room_mic_calibration.center()
-        else:
-            room_mic_calibration = None
+    elif not os.path.isfile(room_mic_calibration):
+        raise FileNotFoundError(f'Room mic calibration file doesn\'t exist at "{room_mic_calibration}"')
+    if os.path.isfile(room_mic_calibration):
+        # File found, create frequency response
+        room_mic_calibration = FrequencyResponse.read_from_csv(room_mic_calibration)
+        room_mic_calibration.interpolate(f_step=1.05, f_min=10, f_max=hrir.fs / 2)
+        room_mic_calibration.center()
+    else:
+        room_mic_calibration = None
 
     # Crop heads and tails from room impulse responses
     for speaker, pair in rir.irs.items():
