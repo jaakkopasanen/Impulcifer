@@ -4,7 +4,7 @@ import os
 import sys
 import matplotlib.pyplot as plt
 sys.path.insert(1, os.path.realpath(os.path.join(sys.path[0], os.pardir)))
-from utils import read_wav, config_fr_axis
+from utils import read_wav, config_fr_axis, optimize_png_size
 from constants import COLORS
 from impulse_response import ImpulseResponse
 
@@ -32,6 +32,7 @@ def main():
             frs.append(fr)
 
         fig, ax = plt.subplots(1, 2)
+        fig.set_size_inches(18, 9)
         fig.suptitle(name)
 
         ax[0].plot(frs[0].frequency, frs[0].smoothed, color=COLORS['blue'])
@@ -47,6 +48,10 @@ def main():
         config_fr_axis(ax[1])
         ax[1].legend(['FL-right', 'FR-left', 'Difference'])
         ax[1].set_title('FL-right vs FR-left')
+
+        fig_path = os.path.join(DIR_PATH, f'{name}.png')
+        fig.savefig(fig_path, bbox_inches='tight')
+        optimize_png_size(fig_path)
 
     plt.show()
 

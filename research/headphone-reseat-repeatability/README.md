@@ -14,4 +14,4 @@ similarly.
 Headphones used in this experiment were Sennheiser HD 800 and the binaural microphones were The Sound Professionals
 SP-TFB-2 with hooks cut off and the capsules glued to ear plugs.
 
-![results](https://i.imgur.com/Vgty8A2.png)
+![results](./Results.png)

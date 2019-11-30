@@ -17,4 +17,4 @@ Plugged measurements show level reduction by 3 to 4 dB and in some cases have si
 region. Other than that they are quite similar to the closed ear canal measurements and don't exhibit the 4 kHz notch
 of open ear canal measurements.
 
-![results](https://i.imgur.com/JumzxZT.png)
+![results](./Results.png)
