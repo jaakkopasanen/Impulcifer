@@ -38,3 +38,13 @@ for _speaker in SPEAKER_NAMES:
             angle=abs(SPEAKER_ANGLES[_speaker]),
             ear='primary' if _side[0] == _speaker.lower()[1] else 'secondary'
         )[2]
+
+COLORS = {
+    'ligthblue': '#7db4db',
+    'blue': '#1f77b4',
+    'pink': '#dd8081',
+    'red': '#d62728',
+    'lightpurple': '#ecdef9',
+    'purple': '#680fb9',
+    'green': '#2ca02c'
+}

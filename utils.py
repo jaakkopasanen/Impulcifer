@@ -5,6 +5,7 @@ import numpy as np
 import soundfile as sf
 from scipy.fftpack import fft
 from PIL import Image
+import matplotlib.ticker as ticker
 
 
 def read_wav(file_path, expand=False):
@@ -156,3 +157,14 @@ def optimize_png_size(file_path, n_colors=60):
     im = Image.open(file_path)
     im = im.convert('P', palette=Image.ADAPTIVE, colors=n_colors)
     im.save(file_path, optimize=True)
+
+
+def config_fr_axis(ax):
+    """Configures given axis instance for frequency response plots."""
+    ax.set_xlabel('Frequency (Hz)')
+    ax.semilogx()
+    ax.set_xlim([20, 20e3])
+    ax.set_ylabel('Amplitude (dB)')
+    ax.grid(True, which='major')
+    ax.grid(True, which='minor')
+    ax.xaxis.set_major_formatter(ticker.StrMethodFormatter('{x:.0f}'))
