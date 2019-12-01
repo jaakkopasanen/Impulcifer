@@ -115,14 +115,27 @@ def main():
     fig, ax = plt.subplots(1, 2)
     fig.set_size_inches(18, 9)
     fig.suptitle('Feedback vs Feedforward')
+    sl = np.logical_and(feedback_errors['left'].frequency > 20, feedback_errors['left'].frequency < 20000)
+    stack = [
+        feedback_errors['left'].error[sl],
+        feedback_errors['right'].error[sl],
+        feedforward_errors['left'].error_smoothed[sl],
+        feedforward_errors['right'].error_smoothed[sl],
+    ]
     for i, side in enumerate(['left', 'right']):
         config_fr_axis(ax[i])
         ax[i].plot(feedback_errors[side].frequency, feedback_errors[side].error)
         ax[i].plot(feedforward_errors[side].frequency, feedforward_errors[side].error_smoothed)
         difference = feedback_errors[side].error - feedforward_errors[side].error_smoothed
+        stack.append(difference[sl])
         ax[i].plot(feedback_errors[side].frequency, difference, color=COLORS['red'])
         ax[i].set_title(side)
         ax[i].legend(['Feedback', 'Feedforward', 'Difference'])
+
+    stack = np.concatenate(stack)
+    ax[0].set_ylim([np.min(stack), np.max(stack)])
+    ax[1].set_ylim([np.min(stack), np.max(stack)])
+
     save_fig_as_png(os.path.join(DIR_PATH, 'comparison.png'), fig)
     plt.show()
 
