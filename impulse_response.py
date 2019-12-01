@@ -135,6 +135,17 @@ class ImpulseResponse:
         self.data = nnresample.resample(self.data, fs, self.fs)
         self.fs = fs
 
+    def convolve(self, x):
+        """Convolves input data with this impulse response
+
+        Args:
+            x: Input data to be convolved
+
+        Returns:
+            Convolved data
+        """
+        return signal.convolve(x, self.data, mode='full')
+
     def pnr(self):
         """Calculates peak to noise ratio"""
         data = self.data / np.max(np.abs(self.data))  # Normalize to 0 dB

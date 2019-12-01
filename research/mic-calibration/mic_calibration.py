@@ -27,7 +27,7 @@ def main(test_signal):
     if os.path.isfile(room_mic_calibration):
         # File found, create frequency response
         room_mic_calibration = FrequencyResponse.read_from_csv(room_mic_calibration)
-        room_mic_calibration.interpolate()
+        room_mic_calibration.interpolate(f_step=1.01, f_min=10, f_max=20e3)
         room_mic_calibration.center()
     else:
         room_mic_calibration = None
@@ -37,7 +37,9 @@ def main(test_signal):
     for file_path in glob(os.path.join(DIR_PATH, 'room*.wav')):
         room = HRIR(estimator)
         room.open_recording(file_path, speakers=['FL'], side='left')
-        rooms.append(room.irs['FL']['left'].frequency_response())
+        fr = room.irs['FL']['left'].frequency_response()
+        fr.interpolate(f_step=1.01, f_min=10, f_max=20e3)
+        rooms.append(fr)
         if room_mic_calibration is not None:
             # Adjust by calibration data
             rooms[-1].raw -= room_mic_calibration.raw
@@ -69,6 +71,7 @@ def main(test_signal):
         frequency=rooms[0].frequency,
         raw=np.mean(np.vstack([x.raw for x in rooms]), axis=0)
     )
+    room.interpolate(f_step=1.01, f_min=10, f_max=20e3)
     room.smoothen_fractional_octave(window_size=1/6, treble_window_size=1/6)
     room.raw = room.smoothed.copy()
     room.smoothed = []
@@ -81,6 +84,7 @@ def main(test_signal):
         frequency=lefts[0].frequency,
         raw=np.mean(np.vstack([x.raw for x in lefts]), axis=0)
     )
+    left.interpolate(f_step=1.01, f_min=10, f_max=20e3)
     left.smoothen_fractional_octave(window_size=1/6, treble_window_size=1/6)
     left.raw = left.smoothed.copy()
     left.smoothed = []
@@ -95,6 +99,7 @@ def main(test_signal):
         frequency=rights[0].frequency,
         raw=np.mean(np.vstack([x.raw for x in rights]), axis=0)
     )
+    right.interpolate(f_step=1.01, f_min=10, f_max=20e3)
     right.smoothen_fractional_octave(window_size=1/6, treble_window_size=1/6)
     right.raw = right.smoothed.copy()
     right.smoothed = []

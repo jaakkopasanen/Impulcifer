@@ -149,6 +149,79 @@ class ImpulseResponseEstimator(object):
         """Estimates impulse response"""
         return convolve(recording, self.inverse_filter, mode='same', method='auto')
 
+    def sweep_sequence(self, speakers, tracks):
+        """Creates sine sweep sequence data with multiple tracks
+
+        Output depends on the speakers and tracks in a way that speakers define which physical speakers will should be
+        used during the playback and tracks define how many tracks the the output should have.
+
+        When speakers is [FL, FR] and tracks is "stereo" the output will contain two tracks of which the first is the FL
+        and the second is FR. In this case the FL will play first and FR track will be silent and the FR will play while
+        the FL is silent.
+
+        When speakers is [FL, FR] and tracks is "7.1" the output will contain 8 tracks of which first two are FL and FR.
+        All other tracks in the output data are silent throughout the whole sequence. When speakers is [FL, FC, FR, SR,
+        BR, BL, SL] there will be 7 tracks with sine sweep and one silent track (LFE) and physical speakers will play
+        the sweeps in the order given in speakers.
+
+        Mono sequences can be made by single speaker name in speakers. In most cases tracks should not be "mono" when
+        playing back mono sequences because the single track might get upmixed to stereo. In most systems it's required
+        to have tracks as "stereo" or higher when playing mono sequences. Playing mono sweep on center channel could
+        be achieved by setting speakers to [FC] and tracks to "7.1" or "5.1". Playing mono sweep on left channel could
+        be achieved by setting speakers to [FL] and tracks to "stereo" (or higher depending on the speaker system).
+
+        Args:
+            speakers: List of speaker names to use in the sequence
+            tracks: Tracks configuration. "7.1", "5.1", "stereo" or "mono".
+
+        Returns:
+            Sweep sequence data as Numpy array. Each row represents a single track.
+        """
+        unique_speakers = []
+        for speaker in speakers:
+            if speaker in unique_speakers:
+                raise ValueError('All speaker names in speakers must be unique.')
+
+        # Remap channels
+        if tracks == '7.1':
+            standard_order = 'FL FR FC LFE BL BR SL SR'.split()
+            n_tracks = 8
+        elif tracks == '5.1':
+            standard_order = 'FL FR FC LFE BL BR'.split()
+            n_tracks = 6
+        elif tracks == 'stereo':
+            standard_order = 'FL FR'.split()
+            n_tracks = 2
+        elif tracks == 'mono':
+            standard_order = ['FL']
+            speakers = ['FL']
+            n_tracks = 1
+        else:
+            raise ValueError('Unsupported track configuration "{}".'.format(tracks))
+
+        for speaker in speakers:
+            if speaker not in standard_order:
+                raise ValueError('Speaker name "{speaker}" not supported with track configuration "{tracks}"'.format(
+                    speaker=speaker,
+                    tracks=tracks
+                ))
+        speaker_indices = [standard_order.index(ch) for ch in speakers]
+
+        # Create test signal sequence
+        data = np.zeros((n_tracks, int((self.fs * 2.0 + len(self)) * len(speakers) + self.fs * 2.0)))
+        for i, speaker in enumerate(speakers):
+            start_zeros = int((self.fs * 2.0 + len(self)) * i + self.fs * 2.0)
+            end_zeros = int((self.fs * 2.0 + len(self)) * (len(speakers) - i - 1) + self.fs * 2.0)
+            sweep_padded = np.concatenate([
+                np.zeros((start_zeros,)),
+                self.test_signal,
+                np.zeros((end_zeros,))
+            ])
+            data[speaker_indices[i], :] = sweep_padded
+        data = np.vstack(data)
+
+        return data
+
     @classmethod
     def from_wav(cls, file_path):
         """Creates ImpulseResponseEstimator instance from test signal WAV."""
@@ -170,8 +243,19 @@ class ImpulseResponseEstimator(object):
         with open(file_path, 'wb') as f:
             pickle.dump(self, f, protocol=pickle.HIGHEST_PROTOCOL)
 
+    def file_name(self, bit_depth):
+        """Formats a file name for test signal without prefixe or file format
 
-def main():
+        Args:
+            bit_depth: Bit depth of the target WAV file
+
+        Returns:
+            File name name
+        """
+        return f'{self.duration:.2f}s-{self.fs:d}Hz-{bit_depth:d}bit-{self.low:.2f}Hz-{self.high:.0f}Hz'
+
+
+def create_cli():
     arg_parser = ArgumentParser()
     arg_parser.add_argument('--dir_path', type=str, required=True,
                             help='Path to directory where generated test signal is saved. Default file name is used.')
@@ -197,76 +281,34 @@ def main():
     if not os.path.isdir(cli_args.dir_path):
         # File path is required
         raise TypeError('--dir_path must be a directory.')
+    return cli_args
 
-    speakers = cli_args.speakers.split(',')
-    unique_speakers = []
-    for speaker in speakers:
-        if speaker in unique_speakers:
-            raise ValueError('All speaker names in speakers must be unique.')
 
+def main():
+    # Handle command line arguments
+    cli_args = create_cli()
     dir_path = cli_args.dir_path
-    tracks = cli_args.tracks
-    duration = cli_args.duration
     fs = cli_args.fs
+    duration = cli_args.duration
     bit_depth = cli_args.bit_depth
+    speakers = cli_args.speakers.split(',')
+    tracks = cli_args.tracks
 
-    # Remap channels
-    if tracks == '7.1':
-        standard_order = 'FL FR FC LFE BL BR SL SR'.split()
-        n_tracks = 8
-    elif tracks == '5.1':
-        standard_order = 'FL FR FC LFE BL BR'.split()
-        n_tracks = 6
-    elif tracks == 'stereo':
-        standard_order = 'FL FR'.split()
-        n_tracks = 2
-    elif tracks == 'mono':
-        standard_order = ['FL']
-        speakers = ['FL']
-        n_tracks = 1
-    else:
-        raise ValueError('Unsupported track configuration "{}".'.format(tracks))
-
-    for speaker in speakers:
-        if speaker not in standard_order:
-            raise ValueError('Speaker name "{speaker}" not supported with track configuration "{tracks}"'.format(
-                speaker=speaker,
-                tracks=tracks
-            ))
-    speaker_indices = [standard_order.index(ch) for ch in speakers]
-
-    # Create instance
+    # Create sweep sequence WAV data
     ire = ImpulseResponseEstimator(min_duration=duration, fs=fs)
-
-    # Create file path with directory and default file name
-    file_name = 'sweep-{t:.2f}s-{fs:d}Hz-{bits:d}bit-{low:.2f}Hz-{high:d}Hz.wav'.format(
-        fs=fs, t=ire.duration, bits=bit_depth, low=ire.low, high=int(ire.high)
-    )
-    file_path = os.path.join(dir_path, file_name)
-    speaker_seq = ','.join(speakers)
-    seq_file_path = os.path.join(dir_path, file_name.replace('sweep-', 'sweep-seg-{}-{}-'.format(speaker_seq, tracks)))
+    wav_data = ire.sweep_sequence(speakers, tracks)
 
     # Write test signal to WAV file
-    write_wav(file_path, ire.fs, ire.test_signal, bit_depth=bit_depth)
+    file_name = f'sweep-{ire.file_name(bit_depth)}.wav'
+    write_wav(os.path.join(dir_path, file_name), ire.fs, ire.test_signal, bit_depth=bit_depth)
 
-    # Write to pickle file
-    ire.to_pickle(file_path.replace('.wav', '.pkl'))
+    # Write test signal to pickle file
+    file_name = f'sweep-{ire.file_name(bit_depth)}.pkl'
+    ire.to_pickle(os.path.join(dir_path, file_name))
 
-    # Create test signal sequence
-    data = np.zeros((n_tracks, int((ire.fs * 2.0 + len(ire)) * len(speakers) + ire.fs * 2.0)))
-    for i, speaker in enumerate(speakers):
-        start_zeros = int((ire.fs * 2.0 + len(ire)) * i + ire.fs * 2.0)
-        end_zeros = int((ire.fs * 2.0 + len(ire)) * (len(speakers) - i - 1) + ire.fs * 2.0)
-        sweep_padded = np.concatenate([
-            np.zeros((start_zeros,)),
-            ire.test_signal,
-            np.zeros((end_zeros,))
-        ])
-        data[speaker_indices[i], :] = sweep_padded
-    data = np.vstack(data)
-
-    # Write test signal sequence
-    write_wav(seq_file_path, ire.fs, data, bit_depth=bit_depth)
+    # Write test signal sequence to WAV file
+    file_name = f'sweep-seg-{",".join(speakers)}-{tracks}-{ire.file_name(bit_depth)}.wav'
+    write_wav(os.path.join(dir_path, file_name), fs, wav_data, bit_depth=bit_depth)
 
 
 if __name__ == '__main__':

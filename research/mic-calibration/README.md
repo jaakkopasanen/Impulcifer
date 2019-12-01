@@ -23,4 +23,4 @@ Microphone calibration tool produces a graph which shows frequency responses of 
 mic. Left mic and measurement mic frequency responses are centered so that they are around 0 dB. Right mic frequency
 response is relative to left mic in order to reveal potential level matching problems of the two capsules.
 
-![calibration-result](https://i.imgur.com/5gSmpJB.png)
+![calibration-result](./Results.png)
