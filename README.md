@@ -58,7 +58,7 @@ source venv/bin/activate
 ```
 - Install required packages.  
 ```bash
-pip install -r requirements.txt
+pip install -U -r requirements.txt
 ```
 - Verify installation. You should see help printed if everything went well.  
 ```bash
@@ -74,10 +74,16 @@ venv\Scripts\activate
 source venv/bin/activate
 ```
 
+### Updating
 Impulcifer is under active development and updates quite frequently. You can update your own copy by running:
 ```bash
 git pull
 ```
+required packages change quite rarely but sometimes they do and then it's necessary to upgrade them
+```bash
+pip install -U -r requirements.txt
+```
+You can always invoke the update for required packages, it does no harm when nothing has changed.
 
 ## Demo
 The actual HRIR measurements require a little investment in measurement gear and the chances are that you're here before
@@ -277,6 +283,10 @@ the recording and output sampling rates differ. For example `--fs=44100`.
 #### Plotting Graphs
 Various graphs can be produced by providing `--plot` parameter to Impulcifer. These can be helpful in figuring out what
 went wrong if the produced HRIR doesn't sound right. Producing the plots will take some time.
+
+- **pre** plots are the unprocessed HRIR measurement
+- **room** plots are room measurements done with measurement microphone
+- **post** plots are the final results after all processing
 
 #### Channel Balance Correction
 Channel balance can be corrected with `--channel_balance` parameter. In ideal case this would not be needed and the
