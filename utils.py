@@ -150,6 +150,7 @@ def optimize_png_size(file_path, n_colors=60):
 
     Args:
         file_path: Path to image
+        n_colors: Number of colors in the PNG image
 
     Returns:
         None
@@ -157,6 +158,12 @@ def optimize_png_size(file_path, n_colors=60):
     im = Image.open(file_path)
     im = im.convert('P', palette=Image.ADAPTIVE, colors=n_colors)
     im.save(file_path, optimize=True)
+
+
+def save_fig_as_png(file_path, fig, n_colors=60):
+    """Saves figure and optimizes file size."""
+    fig.savefig(file_path, bbox_inches='tight')
+    optimize_png_size(file_path, n_colors=n_colors)
 
 
 def config_fr_axis(ax):
