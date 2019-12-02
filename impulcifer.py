@@ -67,9 +67,6 @@ def main(dir_path=None,
     if len(hrir.irs) == 0:
         raise ValueError('No HRIR recordings found in the directory.')
 
-    # Write multi-channel WAV file with sine sweeps for debugging
-    hrir.write_wav(os.path.join(dir_path, 'responses.wav'))
-
     # Write info and stats in readme
     write_readme(os.path.join(dir_path, 'README.md'), hrir, fs)
 
@@ -83,6 +80,9 @@ def main(dir_path=None,
 
     # Crop noise from the tail
     hrir.crop_tails()
+
+    # Write multi-channel WAV file with sine sweeps for debugging
+    hrir.write_wav(os.path.join(dir_path, 'responses.wav'))
 
     # Room correction
     if do_room_correction:
@@ -182,6 +182,7 @@ def correct_room(hrir, dir_path=None, room_target=None, room_mic_calibration=Non
         # No room target specified, use flat
         room_target = FrequencyResponse(name='room-target')
         room_target.raw = np.zeros(room_target.frequency.shape)
+        room_target.interpolate(f_step=1.05, f_min=10, f_max=hrir.fs / 2)
 
     # Room measurement microphone calibration
     if room_mic_calibration is None:
