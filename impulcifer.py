@@ -9,12 +9,10 @@ import numpy as np
 from scipy import signal
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
-from PIL import Image
 from autoeq.frequency_response import FrequencyResponse
 from impulse_response_estimator import ImpulseResponseEstimator
 from hrir import HRIR
-from impulse_response import ImpulseResponse
-from utils import sync_axes, read_wav
+from utils import sync_axes, read_wav, save_fig_as_png
 from constants import SPEAKER_NAMES, SPEAKER_LIST_PATTERN, IR_ROOM_SPL
 
 
@@ -26,33 +24,52 @@ def main(dir_path=None,
          plot=False,
          channel_balance=None,
          do_room_correction=True,
-         do_headphone_compensation=True):
+         do_headphone_compensation=True,
+         do_equalization=True):
     """"""
     if dir_path is None or not os.path.isdir(dir_path):
         raise NotADirectoryError(f'Given dir path "{dir_path}"" is not a directory.')
 
-    # Paths
+    # Dir path as absolute
     dir_path = os.path.abspath(dir_path)
+
+    # Impulse response estimator
     if not test_signal:
+        # Test signal not explicitly given, try Pickle first then WAV
         if os.path.isfile(os.path.join(dir_path, 'test.pkl')):
             test_signal = os.path.join(dir_path, 'test.pkl')
         elif os.path.isfile(os.path.join(dir_path, 'test.wav')):
             test_signal = os.path.join(dir_path, 'test.wav')
-    headphones = os.path.join(dir_path, 'headphones.wav')
-    eq = os.path.join(dir_path, 'eq.wav')
-
-    # Read files
     if re.match(r'^.+\.wav$', test_signal, flags=re.IGNORECASE):
+        # Test signal is WAV file
         estimator = ImpulseResponseEstimator.from_wav(test_signal)
     elif re.match(r'^.+\.pkl$', test_signal, flags=re.IGNORECASE):
+        # Test signal is Pickle file
         estimator = ImpulseResponseEstimator.from_pickle(test_signal)
     else:
         raise TypeError(f'Unknown file extension for test signal "{test_signal}"')
 
-    # Compensate headphones
-    headphone_firs = None
-    if os.path.isfile(headphones) and do_headphone_compensation:
-        headphone_firs = headphone_compensation(headphones, estimator, dir_path=dir_path)
+    # Headphone compensation frequency responses
+    hp_left = None
+    hp_right = None
+    if do_headphone_compensation:
+        hp_left, hp_right = headphone_compensation(estimator, dir_path)
+
+    # Room correction frequency responses
+    room_frs = None
+    if do_room_correction:
+        _, room_frs = correct_room(
+            estimator, dir_path,
+            target=room_target,
+            mic_calibration=room_mic_calibration,
+            plot=plot
+        )
+
+    # Equalization
+    eq_left = None
+    eq_right = None
+    if do_equalization:
+        eq_left, eq_right = read_eq(estimator, dir_path)
 
     # HRIR measurements
     hrir = HRIR(estimator)
@@ -84,25 +101,44 @@ def main(dir_path=None,
     # Write multi-channel WAV file with sine sweeps for debugging
     hrir.write_wav(os.path.join(dir_path, 'responses.wav'))
 
-    # Room correction
-    if do_room_correction:
-        correct_room(
-            hrir,
-            dir_path=dir_path,
-            room_target=room_target,
-            room_mic_calibration=room_mic_calibration,
-            plot=plot
-        )
+    # Equalize all
+    if do_headphone_compensation or do_room_correction or do_equalization:
+        for speaker, pair in hrir.irs.items():
+            for side, ir in pair.items():
+                fr = FrequencyResponse(name='eq')
+                fr.raw = np.zeros(fr.frequency.shape)
+                fr.interpolate(f_step=1.01, f_min=10, f_max=estimator.fs / 2)
+                fr.error = np.zeros(fr.frequency.shape)
 
-    if headphone_firs is not None:
-        hrir.equalize(headphone_firs)
+                if room_frs is not None and speaker in room_frs and side in room_frs[speaker]:
+                    # Room correction
+                    fr.error += room_frs[speaker][side].error
 
-    # Apply given equalization filter
-    if os.path.isfile(eq):
-        eq_fs, firs = read_wav(eq)
-        if eq_fs != hrir.fs:
-            raise ValueError('Equalization FIR filter sampling rate must match HRIR sampling rate.')
-        hrir.equalize(firs)
+                if side == 'left':
+                    hp_eq = hp_left
+                    eq = eq_left
+                else:
+                    hp_eq = hp_right
+                    eq = eq_right
+
+                if hp_eq is not None:
+                    # Headphone compensation
+                    fr.error += hp_eq.error
+                if eq is not None and type(eq) == FrequencyResponse:
+                    # Equalization
+                    fr.error += eq.error
+
+                # Smoothen and equalize
+                fr.smoothen_heavy_light()
+                fr.equalize(max_gain=30, treble_f_lower=10000, treble_f_upper=estimator.fs / 2)
+
+                # Create FIR filter and equalize
+                fir = fr.minimum_phase_impulse_response(fs=estimator.fs, normalize=False)
+                ir.equalize(fir)
+
+                if fr is not None and type(fr) == np.ndarray:
+                    # Equalization filter as FIR filter in WAV file
+                    ir.equalize(fr)
 
     # Correct channel balance
     if channel_balance is not None:
@@ -137,22 +173,73 @@ def main(dir_path=None,
     )
 
 
-def correct_room(hrir, dir_path=None, room_target=None, room_mic_calibration=None, plot=False):
+def read_eq(estimator, dir_path):
+    """Reads equalization FIR filter or CSV settings
+
+    Args:
+        estimator: ImpulseResponseEstimator
+        dir_path: Path to directory
+
+    Returns:
+        - Left side FIR as Numpy array or FrequencyResponse or None
+        - Right side FIR as Numpy array or FrequencyResponse or None
+    """
+    # FIR filter as WAV file
+    eq_path = os.path.join(dir_path, 'eq.wav')
+    if os.path.isfile(eq_path):
+        eq_fs, firs = read_wav(eq_path, expand=True)
+        if eq_fs != estimator.fs:
+            raise ValueError('Equalization FIR filter sampling rate must match HRIR sampling rate.')
+        return firs[0], firs[1]
+
+    # Equalization frequency responses as CSV files
+
+    # Default for both sides
+    eq_path = os.path.join(dir_path, 'eq.csv')
+    eq_fr = None
+    if os.path.isfile(eq_path):
+        eq_fr = FrequencyResponse.read_from_csv(eq_path)
+
+    # Left
+    left_path = os.path.join(dir_path, 'eq-left.csv')
+    left_fr = None
+    if os.path.isfile(left_path):
+        left_fr = FrequencyResponse.read_from_csv(left_path)
+    elif eq_fr is not None:
+        left_fr = eq_fr
+    if left_fr is not None:
+        left_fr.interpolate(f_step=1.01, f_min=10, f_max=estimator.fs / 2)
+
+    # Right
+    right_path = os.path.join(dir_path, 'eq-right.csv')
+    right_fr = None
+    if os.path.isfile(right_path):
+        right_fr = FrequencyResponse.read_from_csv(right_path)
+    elif eq_fr is not None:
+        right_fr = eq_fr
+    if right_fr is not None:
+        right_fr.interpolate(f_step=1.01, f_min=10, f_max=estimator.fs / 2)
+
+    return left_fr, right_fr
+
+
+def correct_room(estimator, dir_path, target=None, mic_calibration=None, plot=False):
     """Corrects room acoustics
 
     Args:
-        hrir: HRIR
-        dir_path: Path to output directory
-        room_target: Path to room target response CSV file
-        room_mic_calibration: Path to room measurement microphone calibration file. AutoEQ CSV files and MiniDSP'
+        estimator: ImpulseResponseEstimator
+        dir_path: Path to directory
+        target: Path to room target response CSV file
+        mic_calibration: Path to room measurement microphone calibration file. AutoEQ CSV files and MiniDSP'
                               txt files are  supported.
         plot: Plot graphs?
 
     Returns:
-        Room Impulse Responses as HRIR or None
+        - Room Impulse Responses as HRIR or None
+        - Equalization frequency responses as dict of dicts (similar to HRIR) or None
     """
     # Read room measurement files
-    rir = HRIR(hrir.estimator)
+    rir = HRIR(estimator)
     # room-BL,SL.wav, room-left-FL,FR.wav, room-right-FC.wav, etc...
     pattern = r'^room-{pattern}(-(left|right))?\.wav$'.format(pattern=SPEAKER_LIST_PATTERN)
     for i, file_name in enumerate([f for f in os.listdir(dir_path) if re.match(pattern, f)]):
@@ -168,36 +255,39 @@ def correct_room(hrir, dir_path=None, room_target=None, room_mic_calibration=Non
         rir.open_recording(file_path, speakers, side=side)
     if not len(rir.irs):
         # No room recording files found
-        return None
+        return None, None
 
     # Room target
-    if room_target is None:
-        room_target = os.path.join(dir_path, 'room-target.csv')
-    if os.path.isfile(room_target):
+    if target is None:
+        target = os.path.join(dir_path, 'room-target.csv')
+    if os.path.isfile(target):
         # File exists, create frequency response
-        room_target = FrequencyResponse.read_from_csv(room_target)
-        room_target.interpolate(f_step=1.05, f_min=10, f_max=hrir.fs / 2)
-        room_target.center()
+        target = FrequencyResponse.read_from_csv(target)
+        target.interpolate(f_step=1.01, f_min=10, f_max=estimator.fs / 2)
+        target.center()
     else:
         # No room target specified, use flat
-        room_target = FrequencyResponse(name='room-target')
-        room_target.raw = np.zeros(room_target.frequency.shape)
-        room_target.interpolate(f_step=1.05, f_min=10, f_max=hrir.fs / 2)
+        target = FrequencyResponse(name='room-target')
+        target.raw = np.zeros(target.frequency.shape)
+        target.interpolate(f_step=1.01, f_min=10, f_max=estimator.fs / 2)
 
     # Room measurement microphone calibration
-    if room_mic_calibration is None:
-        room_mic_calibration = os.path.join(dir_path, 'room-mic-calibration.csv')
-        if not os.path.isfile(room_mic_calibration):
-            room_mic_calibration = os.path.join(dir_path, 'room-mic-calibration.txt')
-    elif not os.path.isfile(room_mic_calibration):
-        raise FileNotFoundError(f'Room mic calibration file doesn\'t exist at "{room_mic_calibration}"')
-    if os.path.isfile(room_mic_calibration):
+    if mic_calibration is None:
+        # Room mic calibration file path not given, try csv first then txt
+        mic_calibration = os.path.join(dir_path, 'room-mic-calibration.csv')
+        if not os.path.isfile(mic_calibration):
+            mic_calibration = os.path.join(dir_path, 'room-mic-calibration.txt')
+    elif not os.path.isfile(mic_calibration):
+        # Room mic calibration file path given, but the file doesn't exist
+        raise FileNotFoundError(f'Room mic calibration file doesn\'t exist at "{mic_calibration}"')
+    if os.path.isfile(mic_calibration):
         # File found, create frequency response
-        room_mic_calibration = FrequencyResponse.read_from_csv(room_mic_calibration)
-        room_mic_calibration.interpolate(f_step=1.05, f_min=10, f_max=hrir.fs / 2)
-        room_mic_calibration.center()
+        mic_calibration = FrequencyResponse.read_from_csv(mic_calibration)
+        mic_calibration.interpolate(f_step=1.01, f_min=10, f_max=estimator.fs / 2)
+        mic_calibration.center()
     else:
-        room_mic_calibration = None
+        # File not found, skip calibration
+        mic_calibration = None
 
     # Crop heads and tails from room impulse responses
     for speaker, pair in rir.irs.items():
@@ -208,76 +298,58 @@ def correct_room(hrir, dir_path=None, room_target=None, room_mic_calibration=Non
 
     figs = None
     if plot:
-        plot_dir = os.path.join(dir_path, 'plots', 'room')
         # Plot all but frequency response
+        plot_dir = os.path.join(dir_path, 'plots', 'room')
         os.makedirs(plot_dir, exist_ok=True)
         figs = rir.plot(plot_fr=False, close_plots=False)
 
-    # Create equalization filters and equalize
-    ref_gain = None
+    # Create equalization frequency responses
+    reference_gain = None
     fr_axes = []
+    frs = dict()
     for speaker, pair in rir.irs.items():
+        frs[speaker] = dict()
         for side, ir in pair.items():
+            # Create frequency response
             fr = ir.frequency_response()
-            fr.interpolate(f_step=1.05, f_min=10, f_max=hrir.fs / 2)
+            fr.interpolate(f_step=1.01, f_min=10, f_max=estimator.fs / 2)
 
-            if room_mic_calibration is not None:
+            if mic_calibration is not None:
                 # Calibrate frequency response
-                fr.raw -= room_mic_calibration.raw
-
-            # Save original data for gain syncing
-            original = fr.raw.copy()
+                fr.raw -= mic_calibration.raw
 
             # Process
-            fr.center()
-            fr.compensate(room_target, min_mean_error=True)
-            fr.smoothen_heavy_light()
-            fr.equalize(
-                max_gain=30,
-                smoothen=True,
-                treble_f_lower=10000,
-                treble_f_upper=20000
-            )
+            fr.compensate(target, min_mean_error=True)
 
             # Sync gains
-            sl = np.logical_and(fr.frequency >= 100, fr.frequency <= 10000)
-            gain = np.mean(original[sl] + fr.equalization[sl])
-            if ref_gain is None:
-                ref_gain = gain
-            fir_gain = ref_gain - gain
-            fir_gain += IR_ROOM_SPL[speaker][side]
-            fir_gain = 10**(fir_gain / 20)
+            if reference_gain is None:
+                reference_gain = fr.center([100, 10000])  # Shifted (up) by this many dB
+            else:
+                fr.raw += reference_gain
 
-            # TODO: Some alien-tech mixed phase filter
-            fir = fr.minimum_phase_impulse_response(fs=rir.fs, f_res=4, normalize=False)
-            fir *= fir_gain
-            # Equalize
-            hrir.irs[speaker][side].equalize(fir)
+            # Adjust target level with the (negative) gain caused by speaker-ear distance in reverberant room
+            target_adjusted = target.copy()
+            target_adjusted.raw += IR_ROOM_SPL[speaker][side]
+            # Compensate with the adjusted room target
+            fr.compensate(target_adjusted, min_mean_error=False)
+
+            # Add frequency response
+            frs[speaker][side] = fr
 
             if plot:
                 file_path = os.path.join(dir_path, 'plots', 'room', f'{speaker}-{side}.png')
+                fr = fr.copy()
+                fr.smoothen_heavy_light()
                 _, fr_ax = ir.plot_fr(
                     fr=fr,
                     fig=figs[speaker][side],
                     ax=figs[speaker][side].get_axes()[4],
-                    plot_raw=True,
+                    plot_raw=False,
                     plot_error=False,
-                    plot_file_path=file_path
+                    plot_file_path=file_path,
+                    fix_ylim=True
                 )
                 fr_axes.append(fr_ax)
-
-    # Zero pad all IRs to same length
-    # TODO: Check delay sync with mixed phase filter
-    lengths = []
-    for speaker, pair in hrir.irs.items():
-        for side, ir in pair.items():
-            lengths.append(len(ir))
-    n = max(lengths)
-    for speaker, pair in hrir.irs.items():
-        for side, ir in pair.items():
-            pad = n - len(ir)
-            if pad > 0:
-                ir.data = np.concatenate([ir.data, np.zeros((pad,))])
 
     if plot:
         # Sync FR plot axes
@@ -286,21 +358,17 @@ def correct_room(hrir, dir_path=None, room_target=None, room_mic_calibration=Non
         for speaker, pair in figs.items():
             for side, fig in pair.items():
                 file_path = os.path.join(dir_path, 'plots', 'room', f'{speaker}-{side}.png')
-                fig.savefig(file_path, bbox_inches='tight')
+                os.makedirs(os.path.split(file_path)[0], exist_ok=True)
+                save_fig_as_png(file_path, fig)
                 plt.close(fig)
-                # Optimize file size
-                im = Image.open(file_path)
-                im = im.convert('P', palette=Image.ADAPTIVE, colors=60)
-                im.save(file_path, optimize=True)
 
-    return rir
+    return rir, frs
 
 
-def headphone_compensation(recording, estimator, dir_path=None):
+def headphone_compensation(estimator, dir_path):
     """Equalizes HRIR tracks with headphone compensation measurement.
 
     Args:
-        recording: File path to sine sweep recording made with headphones
         estimator: ImpulseResponseEstimator instance
         dir_path: Path to output directory
 
@@ -309,109 +377,65 @@ def headphone_compensation(recording, estimator, dir_path=None):
     """
     # Read WAV file
     hp_irs = HRIR(estimator)
-    hp_irs.open_recording(recording, speakers=['FL', 'FR'])
+    hp_irs.open_recording(os.path.join(dir_path, 'headphones.wav'), speakers=['FL', 'FR'])
     hp_irs.write_wav(os.path.join(dir_path, 'headphone-responses.wav'))
-    hp_irs = [hp_irs.irs['FL']['left'], hp_irs.irs['FR']['right']]
 
-    firs = []
-    biases = []
-    frs = []
-    for i, ir in enumerate(hp_irs):
-        # Calculate magnitude response
-        f, m = ir.magnitude_response()
-        # Create frequency response
-        name = 'Left' if i == 0 else 'Right'
-        n = ir.fs / 2 / 4  # 4 Hz resolution
-        step = int(len(f) / n)
-        fr = FrequencyResponse(name=name, frequency=f[1::step], raw=m[1::step])
-        fr.interpolate()
+    # Frequency responses
+    left = hp_irs.irs['FL']['left'].frequency_response()
+    right = hp_irs.irs['FR']['right'].frequency_response()
 
-        # Take copy of the frequency response and
-        fr_eq = fr.copy()
-        # Centering removes bias and we want the bias to stay in the original
-        fr_eq.center()
-        # Aiming for flat response at the ear canal
-        fr_eq.compensate(
-            FrequencyResponse(name='zero', frequency=fr.frequency, raw=np.zeros(len(fr.frequency))),
-            min_mean_error=False
-        )
-        # Smoothen
-        fr_eq.smoothen_heavy_light()
-        # Equalize to flat
-        fr_eq.equalize(max_gain=15, treble_f_lower=20000, treble_f_upper=23000, treble_gain_k=1)
+    # Center by left channel
+    gain = left.center([100, 10000])
+    right.raw += gain
 
-        # Copy equalization curve
-        fr.equalization = fr_eq.equalization.copy()
-        # Calculate equalized raw data
-        fr.equalized_raw = fr.raw + fr.equalization
-        frs.append(fr)
-        # Create minimum phase FIR filter
-        eq_ir = fr.minimum_phase_impulse_response(fs=estimator.fs, f_res=4)
-        firs.append(ImpulseResponse(eq_ir, estimator.fs))
-        # Calculate bias
-        avg = np.mean(fr.equalized_raw[np.logical_and(fr.frequency >= 100, fr.frequency <= 10000)])
-        biases.append(avg)
+    # Compensate
+    zero = FrequencyResponse(name='zero', frequency=left.frequency, raw=np.zeros(len(left.frequency)))
+    left.compensate(zero, min_mean_error=False)
+    right.compensate(zero, min_mean_error=False)
 
-    # Balance equalization filters for left and right ear
-    # Both ears need to have same level
-    # Levels might be different due to measurement devices or microphone placement
-    if biases[0] > biases[1]:
-        # Left headphone measurement is louder, bring it down to level of right headphone
-        firs[0].data *= 10 ** ((biases[1] - biases[0]) / 20)
-        frs[0].equalization += biases[1] - biases[0]
-        frs[0].equalized_raw += biases[1] - biases[0]
-    else:
-        # Right headphone measurement is louder, bring it down to level of left headphone
-        firs[1].data *= 10 ** ((biases[0] - biases[1]) / 20)
-        frs[1].equalization += biases[0] - biases[1]
-        frs[1].equalized_raw += biases[0] - biases[1]
+    # Headphone plots
+    fig = plt.figure()
+    gs = fig.add_gridspec(2, 3)
+    fig.set_size_inches(22, 10)
+    fig.suptitle('Headphones')
 
-    if dir_path is not None:
-        # Headphone plots
-        fig = plt.figure()
-        gs = fig.add_gridspec(2, 3)
-        fig.set_size_inches(22, 10)
-        fig.suptitle('Headphones')
+    # Left
+    axl = fig.add_subplot(gs[0, 0])
+    left.plot_graph(fig=fig, ax=axl, show=False)
+    axl.set_title('Left')
+    # Right
+    axr = fig.add_subplot(gs[1, 0])
+    right.plot_graph(fig=fig, ax=axr, show=False)
+    axr.set_title('Right')
+    # Sync axes
+    sync_axes([axl, axr])
 
-        # Left
-        axl = fig.add_subplot(gs[0, 0])
-        frs[0].plot_graph(fig=fig, ax=axl, show=False)
-        axl.set_title('Left')
-        # Right
-        axr = fig.add_subplot(gs[1, 0])
-        frs[1].plot_graph(fig=fig, ax=axr, show=False)
-        axr.set_title('Right')
-        # Sync axes
-        sync_axes([axl, axr])
+    # Combined
+    _left = left.copy()
+    _right = right.copy()
+    _left.center([100, 10000])
+    _right.center([100, 10000])
+    ax = fig.add_subplot(gs[:, 1:])
+    ax.plot(_left.frequency, _left.raw, linewidth=1, color='#1f77b4')
+    ax.plot(_right.frequency, _right.raw, linewidth=1, color='#d62728')
+    ax.plot(_left.frequency, _left.raw - _right.raw, linewidth=1, color='#680fb9')
+    ax.set_title('Comparison')
+    ax.legend(['Left raw', 'Right raw', 'Difference'], fontsize=8)
+    ax.set_xlabel('Frequency (Hz)')
+    ax.semilogx()
+    ax.set_xlim([20, 20000])
+    ax.set_ylabel('Amplitude (dBr)')
+    ax.grid(True, which='major')
+    ax.grid(True, which='minor')
+    ax.xaxis.set_major_formatter(ticker.StrMethodFormatter('{x:.0f}'))
 
-        # Combined
-        frs[0].center([100, 10000])
-        frs[1].center([100, 10000])
-        ax = fig.add_subplot(gs[:, 1:])
-        ax.plot(frs[0].frequency, frs[0].raw, linewidth=1, color='#1f77b4')
-        ax.plot(frs[1].frequency, frs[1].raw, linewidth=1, color='#d62728')
-        ax.plot(frs[0].frequency, frs[0].raw - frs[1].raw, linewidth=1, color='#680fb9')
-        ax.set_title('Comparison')
-        ax.legend(['Left raw', 'Right raw', 'Difference'], fontsize=8)
-        ax.set_xlabel('Frequency (Hz)')
-        ax.semilogx()
-        ax.set_xlim([20, 20000])
-        ax.set_ylabel('Amplitude (dBr)')
-        ax.grid(True, which='major')
-        ax.grid(True, which='minor')
-        ax.xaxis.set_major_formatter(ticker.StrMethodFormatter('{x:.0f}'))
+    # Save headphone plots
+    file_path = os.path.join(dir_path, 'plots', 'headphones.png')
+    os.makedirs(os.path.split(file_path)[0], exist_ok=True)
+    save_fig_as_png(file_path, fig)
+    plt.close(fig)
 
-        # Save headphone plots
-        os.makedirs(os.path.join(dir_path, 'plots'), exist_ok=True)
-        file_path = os.path.join(dir_path, 'plots', 'Headphones.png')
-        fig.savefig(file_path, bbox_inches='tight')
-        plt.close(fig)
-        # Optimize file size
-        im = Image.open(file_path)
-        im = im.convert('P', palette=Image.ADAPTIVE, colors=60)
-        im.save(file_path, optimize=True)
-
-    return firs
+    return left, right
 
 
 def write_readme(file_path, hrir, fs):
@@ -479,6 +503,8 @@ def create_cli():
                             help='Skip room correction.')
     arg_parser.add_argument('--no_headphone_compensation', action='store_false', dest='do_headphone_compensation',
                             help='Skip headphone compensation.')
+    arg_parser.add_argument('--no_equalization', action='store_false', dest='do_equalization',
+                            help='Skip equalization.')
     arg_parser.add_argument('--fs', type=int, default=argparse.SUPPRESS, help='Output sampling rate in Hertz.')
     arg_parser.add_argument('--plot', action='store_true', help='Plot graphs for debugging.')
     arg_parser.add_argument('--channel_balance', type=str, default=argparse.SUPPRESS,

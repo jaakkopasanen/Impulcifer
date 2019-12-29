@@ -372,7 +372,8 @@ class ImpulseResponse:
                 plot_equalization=True,
                 equalization_color='#2ca02c',
                 plot_equalized=True,
-                equalized_color='#680fb9'):
+                equalized_color='#680fb9',
+                fix_ylim=False):
         """Plots frequency response
 
         Args:
@@ -394,6 +395,7 @@ class ImpulseResponse:
             equalization_color: Color of equalization curve
             plot_equalized: Include equalized curve?
             equalized_color: Color of equalized curve
+            fix_ylim: Fix Y-axis limits calculation?
 
         Returns:
             - Figure
@@ -406,38 +408,57 @@ class ImpulseResponse:
             fig, ax = plt.subplots()
         ax.set_xlabel('Frequency (Hz)')
         ax.semilogx()
-        ax.set_xlim([10, 20e3])
+        ax.set_xlim([20, 20e3])
         ax.set_ylabel('Amplitude (dB)')
         ax.set_title(fr.name)
         ax.grid(True, which='major')
         ax.grid(True, which='minor')
         ax.xaxis.set_major_formatter(ticker.StrMethodFormatter('{x:.0f}'))
         legend = []
+        v = []
+        sl = np.logical_and(fr.frequency >= 20, fr.frequency <= 20000)
 
         if plot_target and len(fr.target):
             ax.plot(fr.frequency, fr.target, linewidth=5, color=target_color)
             legend.append('Target')
+            v.append(fr.target[sl])
         if plot_raw and len(fr.raw):
             ax.plot(fr.frequency, fr.raw, linewidth=0.5, color=raw_color)
             legend.append('Raw')
+            v.append(fr.raw[sl])
         if plot_error and len(fr.error):
             ax.plot(fr.frequency, fr.error, linewidth=0.5, color=error_color)
             legend.append('Error')
+            v.append(fr.error[sl])
         if plot_smoothed and len(fr.smoothed):
             ax.plot(fr.frequency, fr.smoothed, linewidth=1, color=smoothed_color)
             legend.append('Raw Smoothed')
+            v.append(fr.smoothed[sl])
         if plot_error_smoothed and len(fr.error_smoothed):
             ax.plot(fr.frequency, fr.error_smoothed, linewidth=1, color=error_smoothed_color)
             legend.append('Error Smoothed')
+            v.append(fr.error_smoothed[sl])
         if plot_equalization and len(fr.equalization):
             ax.plot(fr.frequency, fr.equalization, linewidth=1, color=equalization_color)
             legend.append('Equalization')
+            v.append(fr.equalization[sl])
         if plot_equalized and len(fr.equalized_raw) and not len(fr.equalized_smoothed):
             ax.plot(fr.frequency, fr.equalized_raw, linewidth=1, color=equalized_color)
             legend.append('Equalized raw')
+            v.append(fr.equalized_raw[sl])
         if plot_equalized and len(fr.equalized_smoothed):
             ax.plot(fr.frequency, fr.equalized_smoothed, linewidth=1, color=equalized_color)
             legend.append('Equalized smoothed')
+            v.append(fr.equalized_smoothed[sl])
+
+        if fix_ylim:
+            # Y axis limits
+            lower = np.min(v)
+            upper = np.max(v)
+            diff = upper - lower
+            lower -= 0.1 * diff
+            upper += 0.1 * diff
+            ax.set_ylim([lower, upper])
 
         ax.legend(legend, fontsize=8)
 

@@ -466,7 +466,7 @@ class HRIR:
         ax.legend(['Left raw', 'Right raw', 'Left smoothed', 'Right smoothed', 'Difference'])
 
         # Save figures
-        file_path = os.path.join(dir_path, f'Results.png')
+        file_path = os.path.join(dir_path, f'results.png')
         fig.savefig(file_path, bbox_inches='tight')
         plt.close(fig)
         # Optimize file size
