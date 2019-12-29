@@ -161,6 +161,7 @@ def main(dir_path=None,
     # Re-sample
     if fs is not None and fs != hrir.fs:
         hrir.resample(fs)
+        hrir.normalize(target_db=0)
 
     # Write multi-channel WAV file with standard track order
     hrir.write_wav(os.path.join(dir_path, 'hrir.wav'))
