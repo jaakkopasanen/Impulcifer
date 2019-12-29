@@ -436,13 +436,14 @@ def write_readme(file_path, hrir, fs):
         for side, ir in pair.items():
             # Zero for the first ear
             _itd = itd if side == 'left' and speaker[1] == 'R' or side == 'right' and speaker[1] == 'L' else 0.0
+            reverb_time = ir.reverberation_time(target_level=-60)
             table.append([
                 speaker,
                 side,
                 f'{ir.pnr():.1f} dB',
                 f'{_itd:.1f} us',
                 f'{ir.active_duration() * 1000:.1f} ms',
-                f'{ir.reverberation_time(target_level=-60) * 1000:.1f} ms'
+                f'{reverb_time * 1000:.1f} ms' if reverb_time is not None else '-'
             ])
     table_str = tabulate(
         table,

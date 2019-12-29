@@ -164,15 +164,19 @@ class ImpulseResponse:
         Returns:
             Reverberation time in seconds
         """
-        inds, decay = self.decay()
-        decay = 20 * np.log10(decay)
-        peak_ind = np.argmax(decay)
-        tail_ind = self.tail_index()
-        for i in range(peak_ind, len(decay)):
-            if decay[i] < target_level:
-                return (inds[i] - inds[peak_ind]) / self.fs
-            if inds[i] / self.fs > tail_ind:
-                return (tail_ind - inds[peak_ind]) / self.fs
+        decay_inds, decay_vals = self.decay()
+        decay_vals = 20 * np.log10(decay_vals)  # dB
+        peak_ind = int(np.argmax(decay_vals))  # Index to decay_inds and decay_vals
+        tail_ind = self.tail_index()  # Index to data
+        for i in range(peak_ind, len(decay_vals)):
+            # Iterate decay from peak to end
+            # i is index to decay_inds and decay_vals
+            if decay_vals[i] < target_level:
+                # Current decay value is below target level, return time between current and peak
+                return (decay_inds[i] - decay_inds[peak_ind]) / self.fs
+            if decay_inds[i] > tail_ind:
+                # Current index is after tail index, target level won't be reached
+                return None
 
     def magnitude_response(self):
         """Calculates magnitude response for the data."""
