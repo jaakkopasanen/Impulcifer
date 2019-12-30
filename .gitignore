@@ -113,3 +113,4 @@ research/**/*.txt
 research/**/*.wav
 research/**/*.WAV
 research/**/*.pkl
+research/*/**/*.png
