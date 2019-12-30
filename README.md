@@ -317,6 +317,15 @@ the end varies case by case. These strategies might cause uncanny sensation beca
 `--channel_balance=right` will do the same in reverse. These strategies might cause uncanny sensation because of
 frequency response warping.
 
+#### Level Adjustment
+Output HRIR level can be adjusted with `--target_level` parameter which will normalize the HRIR gain to the given
+numeric value. The level is calculated from all frequencies excluding lowest bass frequencies and highest treble
+frequencies and then the level is adjusted to the target level. Setting `--target_level=0` will ensure that HRIR
+average gain is about 0 dB. Keep in mind that there often is large variance in the gain of different frequencies so
+target level of 0 dB will not mean that the HRIR would not produce clipping. Typically the desired level is several dB
+negative such as `--target_level=-12.5`. Target level is a tool for having same level for different HRIRs for easier
+comparison.
+
 ## Contact
 [Issues](https://github.com/jaakkopasanen/AutoEq/issues) are the way to go if you are experiencing problems, have
 ideas or if there is something unclear about how things are done or documented.

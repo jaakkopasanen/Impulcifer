@@ -125,14 +125,15 @@ class HRIR:
         # Write to file
         write_wav(file_path, self.fs, irs, bit_depth=bit_depth)
 
-    def normalize(self, target_db=-0.1):
+    def normalize(self, peak_target=-0.1, avg_target=None):
         """Normalizes output gain to target.
 
         Args:
-            target_db: Target gain in dB
+            peak_target: Target gain of the peak in dB
+            avg_target: Target gain of the mid frequencies average in dB
 
         Returns:
-
+            None
         """
         # Stack and sum all left and right ear impulse responses separately
         left = []
@@ -142,11 +143,27 @@ class HRIR:
             right.append(pair['right'].data)
         left = np.sum(np.vstack(left), axis=0)
         right = np.sum(np.vstack(right), axis=0)
+
         # Calculate magnitude responses
         f_l, mr_l = magnitude_response(left, self.fs)
         f_r, mr_r = magnitude_response(right, self.fs)
-        # Maximum absolute gain from both sides
-        gain = np.max(np.vstack([mr_l, mr_r])) * -1 + target_db
+
+        if peak_target is not None and avg_target is None:
+            # Maximum absolute gain from both sides
+            gain = np.max(np.vstack([mr_l, mr_r])) * -1 + peak_target
+
+        elif peak_target is None and avg_target is not None:
+            # Mid frequencies average from both sides
+            gain = np.mean(np.concatenate([
+                mr_l[np.logical_and(f_l > 80, f_l < 6000)],
+                mr_r[np.logical_and(f_r > 80, f_r < 6000)]
+            ]))
+            gain = gain * -1 + avg_target
+
+        else:
+            raise ValueError('One and only one of the parameters "peak_target" and "avg_target" must be given!')
+
+        # Scale impulse responses
         for speaker, pair in self.irs.items():
             for ir in pair.values():
                 ir.data *= 10 ** (gain / 20)

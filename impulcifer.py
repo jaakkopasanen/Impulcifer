@@ -23,6 +23,7 @@ def main(dir_path=None,
          fs=None,
          plot=False,
          channel_balance=None,
+         target_level=None,
          do_room_correction=True,
          do_headphone_compensation=True,
          do_equalization=True):
@@ -140,7 +141,7 @@ def main(dir_path=None,
         hrir.correct_channel_balance(channel_balance)
 
     # Normalize gain
-    hrir.normalize(target_db=0)
+    hrir.normalize(peak_target=None if target_level is not None else -0.1, avg_target=target_level)
 
     if plot:
         # Convolve test signal, re-plot waveform and spectrogram
@@ -156,7 +157,7 @@ def main(dir_path=None,
     # Re-sample
     if fs is not None and fs != hrir.fs:
         hrir.resample(fs)
-        hrir.normalize(target_db=0)
+        hrir.normalize(peak_target=None if target_level is not None else -0.1, avg_target=target_level)
 
     # Write multi-channel WAV file with standard track order
     hrir.write_wav(os.path.join(dir_path, 'hrir.wav'))
@@ -521,6 +522,12 @@ def create_cli():
                                  'or attenuate right side relative to left side by the number of dBs. "mids" is the '
                                  'same as the numerical values but guesses the value automatically from mid frequency '
                                  'levels.')
+    arg_parser.add_argument('--target_level', type=float, default=argparse.SUPPRESS,
+                            help='Target average gain level for left and right channels. This will sum together all '
+                                 'left side impulse responses and right side impulse responses respectively and take '
+                                 'the average gain from mid frequencies. The averaged level is then normalized to the '
+                                 'given target level. This makes it possible to compare HRIRs with somewhat similar '
+                                 'loudness levels. This should be negative in most cases to avoid clipping.')
     args = vars(arg_parser.parse_args())
     return args
 
