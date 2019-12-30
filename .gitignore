@@ -107,3 +107,9 @@ venv.bak/
 .idea
 
 data/my_hrir
+
+research/**/*.csv
+research/**/*.txt
+research/**/*.wav
+research/**/*.WAV
+research/**/*.pkl
