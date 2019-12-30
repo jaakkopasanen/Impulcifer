@@ -12,7 +12,7 @@ import matplotlib.ticker as ticker
 from autoeq.frequency_response import FrequencyResponse
 from impulse_response_estimator import ImpulseResponseEstimator
 from hrir import HRIR
-from utils import sync_axes, read_wav, save_fig_as_png
+from utils import sync_axes, save_fig_as_png
 from constants import SPEAKER_NAMES, SPEAKER_LIST_PATTERN, IR_ROOM_SPL
 
 
@@ -58,7 +58,7 @@ def main(dir_path=None,
     # Room correction frequency responses
     room_frs = None
     if do_room_correction:
-        _, room_frs = correct_room(
+        _, room_frs = room_correction(
             estimator, dir_path,
             target=room_target,
             mic_calibration=room_mic_calibration,
@@ -69,7 +69,7 @@ def main(dir_path=None,
     eq_left = None
     eq_right = None
     if do_equalization:
-        eq_left, eq_right = read_eq(estimator, dir_path)
+        eq_left, eq_right = equalization(estimator, dir_path)
 
     # HRIR measurements
     hrir = HRIR(estimator)
@@ -105,25 +105,22 @@ def main(dir_path=None,
     if do_headphone_compensation or do_room_correction or do_equalization:
         for speaker, pair in hrir.irs.items():
             for side, ir in pair.items():
-                fr = FrequencyResponse(name='eq')
-                fr.raw = np.zeros(fr.frequency.shape)
-                fr.interpolate(f_step=1.01, f_min=10, f_max=estimator.fs / 2)
-                fr.error = np.zeros(fr.frequency.shape)
+                fr = FrequencyResponse(
+                    name='eq',
+                    frequency=FrequencyResponse.generate_frequencies(f_step=1.01, f_min=10, f_max=estimator.fs / 2),
+                    raw=0, error=0
+                )
 
                 if room_frs is not None and speaker in room_frs and side in room_frs[speaker]:
                     # Room correction
                     fr.error += room_frs[speaker][side].error
 
-                if side == 'left':
-                    hp_eq = hp_left
-                    eq = eq_left
-                else:
-                    hp_eq = hp_right
-                    eq = eq_right
-
+                hp_eq = hp_left if side == 'left' else hp_right
                 if hp_eq is not None:
                     # Headphone compensation
                     fr.error += hp_eq.error
+
+                eq = eq_left if side == 'left' else eq_right
                 if eq is not None and type(eq) == FrequencyResponse:
                     # Equalization
                     fr.error += eq.error
@@ -133,15 +130,13 @@ def main(dir_path=None,
                 fr.equalize(max_gain=30, treble_f_lower=10000, treble_f_upper=estimator.fs / 2)
 
                 # Create FIR filter and equalize
+                # FIXME: This is 50% of execution time
                 fir = fr.minimum_phase_impulse_response(fs=estimator.fs, normalize=False)
                 ir.equalize(fir)
 
-                if fr is not None and type(fr) == np.ndarray:
-                    # Equalization filter as FIR filter in WAV file
-                    ir.equalize(fr)
-
     # Correct channel balance
     if channel_balance is not None:
+        # FIXME: This is 25% of execution time
         hrir.correct_channel_balance(channel_balance)
 
     # Normalize gain
@@ -174,7 +169,7 @@ def main(dir_path=None,
     )
 
 
-def read_eq(estimator, dir_path):
+def equalization(estimator, dir_path):
     """Reads equalization FIR filter or CSV settings
 
     Args:
@@ -185,16 +180,6 @@ def read_eq(estimator, dir_path):
         - Left side FIR as Numpy array or FrequencyResponse or None
         - Right side FIR as Numpy array or FrequencyResponse or None
     """
-    # FIR filter as WAV file
-    eq_path = os.path.join(dir_path, 'eq.wav')
-    if os.path.isfile(eq_path):
-        eq_fs, firs = read_wav(eq_path, expand=True)
-        if eq_fs != estimator.fs:
-            raise ValueError('Equalization FIR filter sampling rate must match HRIR sampling rate.')
-        return firs[0], firs[1]
-
-    # Equalization frequency responses as CSV files
-
     # Default for both sides
     eq_path = os.path.join(dir_path, 'eq.csv')
     eq_fr = None
@@ -218,13 +203,30 @@ def read_eq(estimator, dir_path):
         right_fr = FrequencyResponse.read_from_csv(right_path)
     elif eq_fr is not None:
         right_fr = eq_fr
-    if right_fr is not None:
+    if right_fr is not None and right_fr != left_fr:
         right_fr.interpolate(f_step=1.01, f_min=10, f_max=estimator.fs / 2)
+
+    # Plot
+    if left_fr is not None or right_fr is not None:
+        if left_fr == right_fr:
+            # Both are the same, plot only one graph
+            fig, ax = plt.subplots()
+            fig.set_size_inches(12, 9)
+            left_fr.plot_graph(fig=fig, ax=ax, show=False)
+        else:
+            # Left and right are different, plot two graphs in the same figure
+            fig, ax = plt.subplots(1, 2)
+            fig.set_size_inches(22, 9)
+            if left_fr is not None:
+                left_fr.plot_graph(fig=fig, ax=ax[0], show=False)
+            if right_fr is not None:
+                right_fr.plot_graph(fig=fig, ax=ax[1], show=False)
+        save_fig_as_png(os.path.join(dir_path, 'plots', 'eq.png'), fig)
 
     return left_fr, right_fr
 
 
-def correct_room(estimator, dir_path, target=None, mic_calibration=None, plot=False):
+def room_correction(estimator, dir_path, target=None, mic_calibration=None, plot=False):
     """Corrects room acoustics
 
     Args:

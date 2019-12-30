@@ -337,16 +337,16 @@ class HRIR:
     def correct_channel_balance(self, method):
         """Channel balance correction by equalizing left and right ear results to the same frequency response.
 
-            Args:
-                method: "trend" equalizes right side by the difference trend of right and left side. "left" equalizes
-                        right side to left side fr, "right" equalizes left side to right side fr, "avg" equalizes both
-                        to the average fr, "min" equalizes both to the minimum of left and right side frs. Number
-                        values will boost or attenuate right side relative to left side by the number of dBs. "mids" is
-                        the same as the numerical values but guesses the value automatically from mid frequency levels.
+           Args:
+               method: "trend" equalizes right side by the difference trend of right and left side. "left" equalizes
+                       right side to left side fr, "right" equalizes left side to right side fr, "avg" equalizes both
+                       to the average fr, "min" equalizes both to the minimum of left and right side frs. Number
+                       values will boost or attenuate right side relative to left side by the number of dBs. "mids" is
+                       the same as the numerical values but guesses the value automatically from mid frequency levels.
 
-            Returns:
-                HRIR with FIR filter for equalizing each speaker-side
-            """
+           Returns:
+               HRIR with FIR filter for equalizing each speaker-side
+           """
         # Create frequency responses for left and right side IRs
         stacks = [[], []]
         for speaker, pair in self.irs.items():
