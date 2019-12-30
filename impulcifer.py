@@ -180,6 +180,8 @@ def equalization(estimator, dir_path):
         - Left side FIR as Numpy array or FrequencyResponse or None
         - Right side FIR as Numpy array or FrequencyResponse or None
     """
+    if os.path.isfile(os.path.join(dir_path, 'eq.wav')):
+        print('eq.wav is no longer supported, use eq.csv!')
     # Default for both sides
     eq_path = os.path.join(dir_path, 'eq.csv')
     eq_fr = None

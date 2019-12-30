@@ -260,11 +260,11 @@ Impulcifer will compensate for the headphone frequency response using headphone 
 contains file called `headphones.wav`. If you have the file but would like not to have headphone compensation, you can
 simply rename the file for example as `headphones.wav.bak` and run the command again. 
 
-Headphone equalization can be baked into the produced HRIR file by having a file called `eq.wav` in the folder. The eq 
-file must be a WAV file containing one or two FIR filter tracks. When there are two tracks in the file the first track
-is used for left side of the headphone and the second for the right side of the headphone. With a single track the both
-sides use the same equalization. Headphone equalization is useful for in-ear monitors because it's not possible to do
-headphone compensation with IEMs. When using IEMS you still need an around ear headphone for the headphone compensation.
+Headphone equalization can be baked into the produced HRIR file by having a file called `eq.csv` in the folder. The eq 
+file must be an AutoEQ produced result CSV file. Separate equalizations for left and right channels are supported with
+files `eq-left.csv` and `eq-right.csv`. Headphone equalization is useful for in-ear monitors because it's not possible
+to do headphone compensation with IEMs. When using IEMS you still need an around ear headphone for the headphone
+compensation. **eq.wav is no longer supported!**
 
 The way to do this is to create an equalization FIR filter which makes the IEM sound like the around ear headphone and
 saving this FIR filter into the folder as `eq.wav`. Impulcifer will then bake the frequency response transformation
