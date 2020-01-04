@@ -107,7 +107,7 @@ def main(dir_path=None,
         for speaker, pair in hrir.irs.items():
             for side, ir in pair.items():
                 fr = FrequencyResponse(
-                    name='eq',
+                    name=f'{speaker}-{side} eq',
                     frequency=FrequencyResponse.generate_frequencies(f_step=1.01, f_min=10, f_max=estimator.fs / 2),
                     raw=0, error=0
                 )
@@ -128,11 +128,11 @@ def main(dir_path=None,
 
                 # Smoothen and equalize
                 fr.smoothen_heavy_light()
-                fr.equalize(max_gain=30, treble_f_lower=10000, treble_f_upper=estimator.fs / 2)
+                fr.equalize(max_gain=40, treble_f_lower=10000, treble_f_upper=estimator.fs / 2)
 
                 # Create FIR filter and equalize
                 # FIXME: This is 50% of execution time
-                fir = fr.minimum_phase_impulse_response(fs=estimator.fs, normalize=False)
+                fir = fr.minimum_phase_impulse_response(fs=estimator.fs, normalize=False, f_res=5)
                 ir.equalize(fir)
 
     # Correct channel balance
