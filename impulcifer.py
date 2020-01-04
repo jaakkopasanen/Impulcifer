@@ -237,7 +237,7 @@ def room_correction(estimator, dir_path, target=None, mic_calibration=None, plot
         dir_path: Path to directory
         target: Path to room target response CSV file
         mic_calibration: Path to room measurement microphone calibration file. AutoEQ CSV files and MiniDSP'
-                              txt files are  supported.
+                         txt files are  supported.
         plot: Plot graphs?
 
     Returns:
@@ -253,12 +253,30 @@ def room_correction(estimator, dir_path, target=None, mic_calibration=None, plot
         speakers = re.search(SPEAKER_LIST_PATTERN, file_name)
         if speakers is not None:
             speakers = speakers[0].split(',')
-        # Read side if present
-        side = re.search(r'(left|right)', file_name)[0]
         # Form absolute path
         file_path = os.path.join(dir_path, file_name)
+        # Read side if present
+        side = re.search(r'(left|right)', file_name)
+        if side is not None:
+            side = side[0]
         # Read file
         rir.open_recording(file_path, speakers, side=side)
+
+    # Read generic room measurement file if the file exists and there are some room measurements missing after opening
+    # the specific room measurements
+    generic_measurement_file_path = os.path.join(dir_path, 'room.wav')
+    missing = [ch for ch in SPEAKER_NAMES if ch not in rir.irs]
+    if os.path.isfile(generic_measurement_file_path) and len(missing) > 0:
+        rir.open_recording(os.path.join(dir_path, 'room.wav'), missing[0:1], side='left')
+        # Copy the opened impulse response
+        first_missing = rir.irs[missing[0]]['left'].copy()
+        for speaker in missing:
+            # Copy the generic measurement to each missing speaker on both sides
+            rir.irs[speaker] = {
+                'left': first_missing.copy(),
+                'right': first_missing.copy()
+            }
+
     if not len(rir.irs):
         # No room recording files found
         return None, None
@@ -338,6 +356,9 @@ def room_correction(estimator, dir_path, target=None, mic_calibration=None, plot
             target_adjusted.raw += IR_ROOM_SPL[speaker][side]
             # Compensate with the adjusted room target
             fr.compensate(target_adjusted, min_mean_error=False)
+            if speaker in missing:
+                # Limit error only to 1000 Hz
+                fr.error *= fr._sigmoid(f_lower=500, f_upper=1000, a_normal=1.0, a_treble=0.0)
 
             # Add frequency response
             frs[speaker][side] = fr
