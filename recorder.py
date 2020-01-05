@@ -13,7 +13,7 @@ class DeviceNotFoundError(Exception):
     pass
 
 
-def record_target(file_path, length, fs, channels=2):
+def record_target(file_path, length, fs, channels=2, append=False):
     """Records audio and writes it to a file.
 
     Args:
@@ -21,12 +21,26 @@ def record_target(file_path, length, fs, channels=2):
         length: Audio recording length in samples
         fs: Sampling rate
         channels: Number of channels in the recording
+        append: Add track(s) to an existing file? Silence will be added to end of each track to make all equal in
+                length
 
     Returns:
         None
     """
     recording = sd.rec(length, samplerate=fs, channels=channels, blocking=True)
+    recording = np.transpose(recording)
     max_gain = 20 * np.log10(np.max(np.abs(recording)))
+    if append and os.path.isfile(file_path):
+        # Adding to existing file, read the file
+        _fs, data = read_wav(file_path, expand=True)
+        # Zero pad shorter to the length of the longer
+        if recording.shape[1] > data.shape[1]:
+            n = recording.shape[1] - data.shape[1]
+            data = np.pad(data, [(0, 0), (0, n)])
+        elif data.shape[1] > recording.shape[1]:
+            recording = np.pad(data, [(0, 0), (0, data.shape[1] - recording.shape[1])])
+        # Add recording to the end of the existing data
+        recording = np.vstack([data, recording])
     write_wav(file_path, fs, recording)
     print(f'Headroom: {-1.0*max_gain:.1f} dB')
 
@@ -153,7 +167,14 @@ def set_default_devices(input_device, output_device):
     return input_device_str, output_device_str
 
 
-def play_and_record(play=None, record=None, input_device=None, output_device=None, host_api=None, channels=2):
+def play_and_record(
+        play=None,
+        record=None,
+        input_device=None,
+        output_device=None,
+        host_api=None,
+        channels=2,
+        append=False):
     """Plays one file and records another at the same time
 
     Args:
@@ -163,12 +184,14 @@ def play_and_record(play=None, record=None, input_device=None, output_device=Non
         output_device: Number of the output device as seen by sounddevice
         host_api: Host API name
         channels: Number of output channels
+        append: Add track(s) to an existing file? Silence will be added to end of each track to make all equal in
+                length
 
     Returns:
         None
     """
     # Create output directory
-    out_dir, out_file = os.path.split(record)
+    out_dir, out_file = os.path.split(os.path.abspath(record))
     os.makedirs(out_dir, exist_ok=True)
 
     # Read playback file
@@ -187,7 +210,11 @@ def play_and_record(play=None, record=None, input_device=None, output_device=Non
     print(f'Input device:  "{input_device_str}"')
     print(f'Output device: "{output_device_str}"')
 
-    recorder = Thread(target=record_target, args=(record, data.shape[1], fs), kwargs={'channels': channels})
+    recorder = Thread(
+        target=record_target,
+        args=(record, data.shape[1], fs),
+        kwargs={'channels': channels, 'append': append}
+    )
     recorder.start()
     sd.play(np.transpose(data), samplerate=fs, blocking=True)
 
@@ -222,6 +249,9 @@ def create_cli():
                                  'output devices have not been specified (using system defaults) or if they have no '
                                  'host API specified.')
     arg_parser.add_argument('--channels', type=int, default=2, help='Number of output channels.')
+    arg_parser.add_argument('--append', action='store_true',
+                            help='Add track(s) to existing file? Silence will be added to the end of all tracks to '
+                                 'make the equal in length.')
     args = vars(arg_parser.parse_args())
     return args
 

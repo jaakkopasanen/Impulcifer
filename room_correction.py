@@ -174,6 +174,9 @@ def open_generic_room_measurement(estimator, dir_path, mic_calibration, target, 
     # Read the file
     fs, data = read_wav(file_path, expand=True)
 
+    if fs != estimator.fs:
+        raise ValueError(f'Sampling rate of "{file_path}" doesn\'t match!')
+
     # Average frequency responses of all tracks of the generic room measurement file
     irs = []
     for track in data:
