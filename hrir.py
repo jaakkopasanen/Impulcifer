@@ -9,7 +9,7 @@ from PIL import Image
 from autoeq.frequency_response import FrequencyResponse
 from impulse_response import ImpulseResponse
 from utils import read_wav, write_wav, magnitude_response, sync_axes
-from constants import SPEAKER_NAMES, SPEAKER_DELAYS, IR_ORDER
+from constants import SPEAKER_NAMES, SPEAKER_DELAYS, HEXADECAGONAL_TRACK_ORDER
 
 
 class HRIR:
@@ -102,7 +102,7 @@ class HRIR:
         """
         # Duplicate speaker names as left and right side impulse response names
         if track_order is None:
-            track_order = IR_ORDER
+            track_order = HEXADECAGONAL_TRACK_ORDER
 
         # Add all impulse responses to a list and save channel names
         irs = []
@@ -237,7 +237,7 @@ class HRIR:
                 tail_indices.append(ir.tail_index())
 
         # Crop all tracks by last tail index
-        seconds_per_octave = len(self.estimator) / self.fs / self.estimator.n_octaves
+        seconds_per_octave = len(self.estimator) / self.estimator.fs / self.estimator.n_octaves
         fade_out = 2 * int(self.fs * seconds_per_octave * (1 / 24))
         window = signal.hanning(fade_out)[fade_out // 2:]
         tail_ind = max(tail_indices)

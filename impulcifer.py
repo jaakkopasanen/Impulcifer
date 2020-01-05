@@ -6,14 +6,14 @@ import argparse
 from tabulate import tabulate
 from datetime import datetime
 import numpy as np
-from scipy import signal
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 from autoeq.frequency_response import FrequencyResponse
 from impulse_response_estimator import ImpulseResponseEstimator
 from hrir import HRIR
+from room_correction import room_correction
 from utils import sync_axes, save_fig_as_png
-from constants import SPEAKER_NAMES, SPEAKER_LIST_PATTERN, IR_ROOM_SPL
+from constants import SPEAKER_NAMES, SPEAKER_LIST_PATTERN, HESUVI_TRACK_ORDER
 
 
 def main(dir_path=None,
@@ -24,6 +24,7 @@ def main(dir_path=None,
          plot=False,
          channel_balance=None,
          target_level=None,
+         fr_combination_method='average',
          do_room_correction=True,
          do_headphone_compensation=True,
          do_equalization=True):
@@ -35,26 +36,7 @@ def main(dir_path=None,
     dir_path = os.path.abspath(dir_path)
 
     # Impulse response estimator
-    if not test_signal:
-        # Test signal not explicitly given, try Pickle first then WAV
-        if os.path.isfile(os.path.join(dir_path, 'test.pkl')):
-            test_signal = os.path.join(dir_path, 'test.pkl')
-        elif os.path.isfile(os.path.join(dir_path, 'test.wav')):
-            test_signal = os.path.join(dir_path, 'test.wav')
-    if re.match(r'^.+\.wav$', test_signal, flags=re.IGNORECASE):
-        # Test signal is WAV file
-        estimator = ImpulseResponseEstimator.from_wav(test_signal)
-    elif re.match(r'^.+\.pkl$', test_signal, flags=re.IGNORECASE):
-        # Test signal is Pickle file
-        estimator = ImpulseResponseEstimator.from_pickle(test_signal)
-    else:
-        raise TypeError(f'Unknown file extension for test signal "{test_signal}"')
-
-    # Headphone compensation frequency responses
-    hp_left = None
-    hp_right = None
-    if do_headphone_compensation:
-        hp_left, hp_right = headphone_compensation(estimator, dir_path)
+    estimator = open_impulse_response_estimator(dir_path, file_path=test_signal)
 
     # Room correction frequency responses
     room_frs = None
@@ -63,27 +45,18 @@ def main(dir_path=None,
             estimator, dir_path,
             target=room_target,
             mic_calibration=room_mic_calibration,
+            fr_combination_method=fr_combination_method,
             plot=plot
         )
 
+    # Headphone compensation frequency responses
+    hp_left, hp_right = headphone_compensation(estimator, dir_path) if do_headphone_compensation else None, None
+
     # Equalization
-    eq_left = None
-    eq_right = None
-    if do_equalization:
-        eq_left, eq_right = equalization(estimator, dir_path)
+    eq_left, eq_right = equalization(estimator, dir_path) if do_equalization else None, None
 
     # HRIR measurements
-    hrir = HRIR(estimator)
-    pattern = r'^{pattern}\.wav$'.format(pattern=SPEAKER_LIST_PATTERN)  # FL,FR.wav
-    for file_name in [f for f in os.listdir(dir_path) if re.match(pattern, f)]:
-        # Read the speaker names from the file name into a list
-        speakers = re.search(SPEAKER_LIST_PATTERN, file_name)[0].split(',')
-        # Form absolute path
-        file_path = os.path.join(dir_path, file_name)
-        # Open the file and add tracks to HRIR
-        hrir.open_recording(file_path, speakers=speakers)
-    if len(hrir.irs) == 0:
-        raise ValueError('No HRIR recordings found in the directory.')
+    hrir = open_binaural_measurements(estimator, dir_path)
 
     # Write info and stats in readme
     write_readme(os.path.join(dir_path, 'README.md'), hrir, fs)
@@ -147,7 +120,7 @@ def main(dir_path=None,
         # Convolve test signal, re-plot waveform and spectrogram
         for speaker, pair in hrir.irs.items():
             for side, ir in pair.items():
-                ir.recording = signal.convolve(estimator.test_signal, ir.data, mode='full')
+                ir.recording = ir.convolve(estimator.test_signal)
         # Plot post processing
         hrir.plot(os.path.join(dir_path, 'plots', 'post'))
 
@@ -163,11 +136,34 @@ def main(dir_path=None,
     hrir.write_wav(os.path.join(dir_path, 'hrir.wav'))
 
     # Write multi-channel WAV file with HeSuVi track order
-    hrir.write_wav(
-        os.path.join(dir_path, 'hesuvi.wav'),
-        track_order=['FL-left', 'FL-right', 'SL-left', 'SL-right', 'BL-left', 'BL-right', 'FC-left', 'FR-right',
-                     'FR-left', 'SR-right', 'SR-left', 'BR-right', 'BR-left', 'FC-right']
-    )
+    hrir.write_wav(os.path.join(dir_path, 'hesuvi.wav'), track_order=HESUVI_TRACK_ORDER)
+
+
+def open_impulse_response_estimator(dir_path, file_path=None):
+    """Opens impulse response estimator from a file
+
+    Args:
+        dir_path: Path to directory
+        file_path: Explicitly given (if any) path to impulse response estimator Pickle or test signal WAV file
+
+    Returns:
+        ImpulseResponseEstimator instance
+    """
+    if file_path is None:
+        # Test signal not explicitly given, try Pickle first then WAV
+        if os.path.isfile(os.path.join(dir_path, 'test.pkl')):
+            file_path = os.path.join(dir_path, 'test.pkl')
+        elif os.path.isfile(os.path.join(dir_path, 'test.wav')):
+            file_path = os.path.join(dir_path, 'test.wav')
+    if re.match(r'^.+\.wav$', file_path, flags=re.IGNORECASE):
+        # Test signal is WAV file
+        estimator = ImpulseResponseEstimator.from_wav(file_path)
+    elif re.match(r'^.+\.pkl$', file_path, flags=re.IGNORECASE):
+        # Test signal is Pickle file
+        estimator = ImpulseResponseEstimator.from_pickle(file_path)
+    else:
+        raise TypeError(f'Unknown file extension for test signal "{file_path}"')
+    return estimator
 
 
 def equalization(estimator, dir_path):
@@ -227,169 +223,6 @@ def equalization(estimator, dir_path):
         save_fig_as_png(os.path.join(dir_path, 'plots', 'eq.png'), fig)
 
     return left_fr, right_fr
-
-
-def room_correction(estimator, dir_path, target=None, mic_calibration=None, plot=False):
-    """Corrects room acoustics
-
-    Args:
-        estimator: ImpulseResponseEstimator
-        dir_path: Path to directory
-        target: Path to room target response CSV file
-        mic_calibration: Path to room measurement microphone calibration file. AutoEQ CSV files and MiniDSP'
-                         txt files are  supported.
-        plot: Plot graphs?
-
-    Returns:
-        - Room Impulse Responses as HRIR or None
-        - Equalization frequency responses as dict of dicts (similar to HRIR) or None
-    """
-    # Read room measurement files
-    rir = HRIR(estimator)
-    # room-BL,SL.wav, room-left-FL,FR.wav, room-right-FC.wav, etc...
-    pattern = r'^room-{pattern}(-(left|right))?\.wav$'.format(pattern=SPEAKER_LIST_PATTERN)
-    for i, file_name in enumerate([f for f in os.listdir(dir_path) if re.match(pattern, f)]):
-        # Read the speaker names from the file name into a list
-        speakers = re.search(SPEAKER_LIST_PATTERN, file_name)
-        if speakers is not None:
-            speakers = speakers[0].split(',')
-        # Form absolute path
-        file_path = os.path.join(dir_path, file_name)
-        # Read side if present
-        side = re.search(r'(left|right)', file_name)
-        if side is not None:
-            side = side[0]
-        # Read file
-        rir.open_recording(file_path, speakers, side=side)
-
-    # Read generic room measurement file if the file exists and there are some room measurements missing after opening
-    # the specific room measurements
-    generic_measurement_file_path = os.path.join(dir_path, 'room.wav')
-    missing = [ch for ch in SPEAKER_NAMES if ch not in rir.irs]
-    if os.path.isfile(generic_measurement_file_path) and len(missing) > 0:
-        rir.open_recording(os.path.join(dir_path, 'room.wav'), missing[0:1], side='left')
-        # Copy the opened impulse response
-        first_missing = rir.irs[missing[0]]['left'].copy()
-        for speaker in missing:
-            # Copy the generic measurement to each missing speaker on both sides
-            rir.irs[speaker] = {
-                'left': first_missing.copy(),
-                'right': first_missing.copy()
-            }
-
-    if not len(rir.irs):
-        # No room recording files found
-        return None, None
-
-    # Room target
-    if target is None:
-        target = os.path.join(dir_path, 'room-target.csv')
-    if os.path.isfile(target):
-        # File exists, create frequency response
-        target = FrequencyResponse.read_from_csv(target)
-        target.interpolate(f_step=1.01, f_min=10, f_max=estimator.fs / 2)
-        target.center()
-    else:
-        # No room target specified, use flat
-        target = FrequencyResponse(name='room-target')
-        target.raw = np.zeros(target.frequency.shape)
-        target.interpolate(f_step=1.01, f_min=10, f_max=estimator.fs / 2)
-
-    # Room measurement microphone calibration
-    if mic_calibration is None:
-        # Room mic calibration file path not given, try csv first then txt
-        mic_calibration = os.path.join(dir_path, 'room-mic-calibration.csv')
-        if not os.path.isfile(mic_calibration):
-            mic_calibration = os.path.join(dir_path, 'room-mic-calibration.txt')
-    elif not os.path.isfile(mic_calibration):
-        # Room mic calibration file path given, but the file doesn't exist
-        raise FileNotFoundError(f'Room mic calibration file doesn\'t exist at "{mic_calibration}"')
-    if os.path.isfile(mic_calibration):
-        # File found, create frequency response
-        mic_calibration = FrequencyResponse.read_from_csv(mic_calibration)
-        mic_calibration.interpolate(f_step=1.01, f_min=10, f_max=estimator.fs / 2)
-        mic_calibration.center()
-    else:
-        # File not found, skip calibration
-        mic_calibration = None
-
-    # Crop heads and tails from room impulse responses
-    for speaker, pair in rir.irs.items():
-        for side, ir in pair.items():
-            ir.crop_head()
-    rir.crop_tails()
-    rir.write_wav(os.path.join(dir_path, 'room-responses.wav'))
-
-    figs = None
-    if plot:
-        # Plot all but frequency response
-        plot_dir = os.path.join(dir_path, 'plots', 'room')
-        os.makedirs(plot_dir, exist_ok=True)
-        figs = rir.plot(plot_fr=False, close_plots=False)
-
-    # Create equalization frequency responses
-    reference_gain = None
-    fr_axes = []
-    frs = dict()
-    for speaker, pair in rir.irs.items():
-        frs[speaker] = dict()
-        for side, ir in pair.items():
-            # Create frequency response
-            fr = ir.frequency_response()
-            fr.interpolate(f_step=1.01, f_min=10, f_max=estimator.fs / 2)
-
-            if mic_calibration is not None:
-                # Calibrate frequency response
-                fr.raw -= mic_calibration.raw
-
-            # Process
-            fr.compensate(target, min_mean_error=True)
-
-            # Sync gains
-            if reference_gain is None:
-                reference_gain = fr.center([100, 10000])  # Shifted (up) by this many dB
-            else:
-                fr.raw += reference_gain
-
-            # Adjust target level with the (negative) gain caused by speaker-ear distance in reverberant room
-            target_adjusted = target.copy()
-            target_adjusted.raw += IR_ROOM_SPL[speaker][side]
-            # Compensate with the adjusted room target
-            fr.compensate(target_adjusted, min_mean_error=False)
-            if speaker in missing:
-                # Limit error only to 1000 Hz
-                fr.error *= fr._sigmoid(f_lower=500, f_upper=1000, a_normal=1.0, a_treble=0.0)
-
-            # Add frequency response
-            frs[speaker][side] = fr
-
-            if plot:
-                file_path = os.path.join(dir_path, 'plots', 'room', f'{speaker}-{side}.png')
-                fr = fr.copy()
-                fr.smoothen_heavy_light()
-                _, fr_ax = ir.plot_fr(
-                    fr=fr,
-                    fig=figs[speaker][side],
-                    ax=figs[speaker][side].get_axes()[4],
-                    plot_raw=False,
-                    plot_error=False,
-                    plot_file_path=file_path,
-                    fix_ylim=True
-                )
-                fr_axes.append(fr_ax)
-
-    if plot:
-        # Sync FR plot axes
-        sync_axes(fr_axes)
-        # Save figures
-        for speaker, pair in figs.items():
-            for side, fig in pair.items():
-                file_path = os.path.join(dir_path, 'plots', 'room', f'{speaker}-{side}.png')
-                os.makedirs(os.path.split(file_path)[0], exist_ok=True)
-                save_fig_as_png(file_path, fig)
-                plt.close(fig)
-
-    return rir, frs
 
 
 def headphone_compensation(estimator, dir_path):
@@ -463,6 +296,29 @@ def headphone_compensation(estimator, dir_path):
     plt.close(fig)
 
     return left, right
+
+
+def open_binaural_measurements(estimator, dir_path):
+    """Opens binaural measurement WAV files.
+
+    Args:
+        estimator: ImpulseResponseEstimator
+        dir_path: Path to directory
+
+    Returns:
+        HRIR instance
+    """
+    hrir = HRIR(estimator)
+    pattern = r'^{pattern}\.wav$'.format(pattern=SPEAKER_LIST_PATTERN)  # FL,FR.wav
+    for file_name in [f for f in os.listdir(dir_path) if re.match(pattern, f)]:
+        # Read the speaker names from the file name into a list
+        speakers = re.search(SPEAKER_LIST_PATTERN, file_name)[0].split(',')
+        # Form absolute path
+        file_path = os.path.join(dir_path, file_name)
+        # Open the file and add tracks to HRIR
+        hrir.open_recording(file_path, speakers=speakers)
+    if len(hrir.irs) == 0:
+        raise ValueError('No HRIR recordings found in the directory.')
 
 
 def write_readme(file_path, hrir, fs):
@@ -549,6 +405,12 @@ def create_cli():
                                  'the average gain from mid frequencies. The averaged level is then normalized to the '
                                  'given target level. This makes it possible to compare HRIRs with somewhat similar '
                                  'loudness levels. This should be negative in most cases to avoid clipping.')
+    arg_parser.add_argument('--fr_combination_method', type=str, default='average',
+                            help='Method for combining frequency responses of generic room measurements if there are '
+                                 'more than one tracks in the file. "average" will simply average the frequency'
+                                 'responses. "conservative" will take the minimum absolute value for each frequency '
+                                 'but only if the values in all the measurements are positive or negative at the same '
+                                 'time.')
     args = vars(arg_parser.parse_args())
     return args
 
