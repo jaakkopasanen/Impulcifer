@@ -25,6 +25,8 @@ def main(dir_path=None,
          channel_balance=None,
          target_level=None,
          fr_combination_method='average',
+         specific_limit=20000,
+         generic_limit=1000,
          do_room_correction=True,
          do_headphone_compensation=True,
          do_equalization=True):
@@ -46,14 +48,20 @@ def main(dir_path=None,
             target=room_target,
             mic_calibration=room_mic_calibration,
             fr_combination_method=fr_combination_method,
+            specific_limit=specific_limit,
+            generic_limit=generic_limit,
             plot=plot
         )
 
     # Headphone compensation frequency responses
-    hp_left, hp_right = headphone_compensation(estimator, dir_path) if do_headphone_compensation else None, None
+    hp_left, hp_right = None, None
+    if do_headphone_compensation:
+        hp_left, hp_right = headphone_compensation(estimator, dir_path)
 
     # Equalization
-    eq_left, eq_right = equalization(estimator, dir_path) if do_equalization else None, None
+    eq_left, eq_right = None, None
+    if do_equalization:
+        eq_left, eq_right = equalization(estimator, dir_path)
 
     # HRIR measurements
     hrir = open_binaural_measurements(estimator, dir_path)
@@ -319,6 +327,7 @@ def open_binaural_measurements(estimator, dir_path):
         hrir.open_recording(file_path, speakers=speakers)
     if len(hrir.irs) == 0:
         raise ValueError('No HRIR recordings found in the directory.')
+    return hrir
 
 
 def write_readme(file_path, hrir, fs):
@@ -411,6 +420,14 @@ def create_cli():
                                  'responses. "conservative" will take the minimum absolute value for each frequency '
                                  'but only if the values in all the measurements are positive or negative at the same '
                                  'time.')
+    arg_parser.add_argument('--specific_limit', type=float, default=20000,
+                            help='Upper limit for room equalization with speaker-ear specific room measurements. '
+                                 'Equalization will drop down to 0 dB at this frequency in the leading octave. 0 '
+                                 'disables limit.')
+    arg_parser.add_argument('--generic_limit', type=float, default=1000,
+                            help='Upper limit for room equalization with generic room measurements. '
+                                 'Equalization will drop down to 0 dB at this frequency in the leading octave. 0 '
+                                 'disables limit.')
     args = vars(arg_parser.parse_args())
     return args
 

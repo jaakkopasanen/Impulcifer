@@ -8,8 +8,8 @@ from scipy import signal
 from autoeq.frequency_response import FrequencyResponse
 from impulse_response import ImpulseResponse
 from hrir import HRIR
-from utils import sync_axes, save_fig_as_png, read_wav
-from constants import SPEAKER_NAMES, SPEAKER_LIST_PATTERN, IR_ROOM_SPL
+from utils import sync_axes, save_fig_as_png, read_wav, get_ylim, config_fr_axis
+from constants import SPEAKER_NAMES, SPEAKER_LIST_PATTERN, IR_ROOM_SPL, COLORS
 
 
 def room_correction(
@@ -18,6 +18,8 @@ def room_correction(
         target=None,
         mic_calibration=None,
         fr_combination_method='average',
+        specific_limit=20000,
+        generic_limit=1000,
         plot=False):
     """Corrects room acoustics
 
@@ -28,6 +30,8 @@ def room_correction(
         mic_calibration: Path to room measurement microphone calibration file
         fr_combination_method: Method for combining generic room measurment frequency responses. "average" or
                                "conservative"
+        specific_limit: Upper limit in Hertz for equalization of specific room eq. 0 disables limit.
+        generic_limit: Upper limit in Hertz for equalization of generic room eq. 0 disables limit.
         plot: Plot graphs?
 
     Returns:
@@ -39,7 +43,15 @@ def room_correction(
     mic_calibration = open_mic_calibration(estimator, dir_path, mic_calibration=mic_calibration)
     rir = open_room_measurements(estimator, dir_path)
     missing = [ch for ch in SPEAKER_NAMES if ch not in rir.irs]
-    room_fr = open_generic_room_measurement(estimator, dir_path, mic_calibration, target, method=fr_combination_method)
+    room_fr = open_generic_room_measurement(
+        estimator,
+        dir_path,
+        mic_calibration,
+        target,
+        method=fr_combination_method,
+        limit=generic_limit,
+        plot=plot
+    )
 
     if not len(rir.irs) and room_fr is None:
         # No room recording files found
@@ -73,9 +85,6 @@ def room_correction(
                 # Calibrate frequency response
                 fr.raw -= mic_calibration.raw
 
-            # Process
-            fr.compensate(target, min_mean_error=True)
-
             # Sync gains
             if reference_gain is None:
                 reference_gain = fr.center([100, 10000])  # Shifted (up) by this many dB
@@ -88,13 +97,24 @@ def room_correction(
             # Compensate with the adjusted room target
             fr.compensate(target_adjusted, min_mean_error=False)
 
+            # Zero error above limit
+            if specific_limit > 0:
+                start = np.argmax(fr.frequency > specific_limit / 2)
+                end = np.argmax(fr.frequency > specific_limit)
+                mask = np.concatenate([
+                    np.ones(start if start > 0 else 0),
+                    signal.windows.hann(end - start),
+                    np.zeros(len(fr.frequency) - end)
+                ])
+                fr.error *= mask
+
             # Add frequency response
             frs[speaker][side] = fr
 
             if plot:
                 file_path = os.path.join(dir_path, 'plots', 'room', f'{speaker}-{side}.png')
                 fr = fr.copy()
-                fr.smoothen_heavy_light()
+                fr.smoothen_fractional_octave(window_size=1/3, treble_window_size=1/3)
                 _, fr_ax = ir.plot_fr(
                     fr=fr,
                     fig=figs[speaker][side],
@@ -106,19 +126,20 @@ def room_correction(
                 )
                 fr_axes.append(fr_ax)
 
-    # Use generic measurement for speakers that don't have specific measurements
-    for speaker in missing:
-        frs[speaker] = {'left': room_fr.copy(), 'right': room_fr.copy()}
+    if len(missing) > 0 and room_fr is not None:
+        # Use generic measurement for speakers that don't have specific measurements
+        for speaker in missing:
+            frs[speaker] = {'left': room_fr.copy(), 'right': room_fr.copy()}
 
     if plot:
+        room_plots_dir = os.path.join(dir_path, 'plots', 'room')
+        os.makedirs(room_plots_dir, exist_ok=True)
         # Sync FR plot axes
         sync_axes(fr_axes)
-        # Save figures
+        # Save specific fR figures
         for speaker, pair in figs.items():
             for side, fig in pair.items():
-                file_path = os.path.join(dir_path, 'plots', 'room', f'{speaker}-{side}.png')
-                os.makedirs(os.path.split(file_path)[0], exist_ok=True)
-                save_fig_as_png(file_path, fig)
+                save_fig_as_png(os.path.join(room_plots_dir, f'{speaker}-{side}.png'), fig)
                 plt.close(fig)
 
     return rir, frs
@@ -154,7 +175,13 @@ def open_room_measurements(estimator, dir_path):
     return rir
 
 
-def open_generic_room_measurement(estimator, dir_path, mic_calibration, target, method='average'):
+def open_generic_room_measurement(estimator,
+                                  dir_path,
+                                  mic_calibration,
+                                  target,
+                                  method='average',
+                                  limit=1000,
+                                  plot=False):
     """Opens generic room measurment file
 
     Args:
@@ -163,9 +190,12 @@ def open_generic_room_measurement(estimator, dir_path, mic_calibration, target, 
         mic_calibration: Measurement microphone calibration FrequencyResponse
         target: Room response target FrequencyResponse
         method: Combination method. "average" or "conservative"
+        limit: Upper limit in Hertz for equalization. Gain will ramp down to 0 dB in the octave leading to this.
+               0 disables limit.
+        plot: Plot frequency response?
 
     Returns:
-
+        Generic room measurement FrequencyResponse
     """
     file_path = os.path.join(dir_path, 'room.wav')
     if not os.path.isfile(file_path):
@@ -187,57 +217,109 @@ def open_generic_room_measurement(estimator, dir_path, mic_calibration, target, 
         irs.append(ir)
 
     # Frequency response for the generic room measurement
-    generic_room_fr = FrequencyResponse(
+    room_fr = FrequencyResponse(
         name='generic_room',
         frequency=FrequencyResponse.generate_frequencies(f_min=10, f_max=estimator.fs / 2, f_step=1.01),
-        error=0
+        raw=0, error=0, target=target.raw
     )
 
     # Calculate and stack errors
+    raws = []
     errors = []
     for ir in irs:
         fr = ir.frequency_response()
         if mic_calibration is not None:
             fr.raw -= mic_calibration.raw
+        fr.center([100, 10000])
+        room_fr.raw += fr.raw
+        raws.append(fr.copy())
         fr.compensate(target, min_mean_error=True)
-        errors.append(fr.error_smoothed)
+        if method == 'conservative' and len(irs) > 1:
+            fr.smoothen_fractional_octave(window_size=1/3, treble_window_size=1/3)
+            errors.append(fr.error_smoothed)
+        else:
+            errors.append(fr.error)
+    room_fr.raw /= len(irs)
     errors = np.vstack(errors)
 
-    # Combine errors
-    if method == 'conservative':
-        # Conservative error curve is zero everywhere else but on indexes where both have the same sign,
-        # at these indexes the smaller absolute value is selected.
-        # This ensures that no curve will be adjusted to the other side of zero
-        mask = np.mean(errors > 0, axis=0)  # Average from boolean values per column
-        positive = mask == 1  # Mask for columns with only positive values
-        negative = mask == 0  # Mask for columns with only negative values
-        # Minimum value for columns with only positive values
-        generic_room_fr.error[positive] = np.min(errors[:, positive], axis=0)
-        # Maximum value for columns with only negative values (minimum absolute value)
-        generic_room_fr.error[negative] = np.max(errors[:, negative], axis=0)
-        # Smoothen out kinks
-        generic_room_fr.smoothen_fractional_octave(window_size=1 / 3, treble_window_size=1 / 3)
-        generic_room_fr.error = generic_room_fr.error_smoothed.copy()
-        generic_room_fr.error_smoothed = np.array([])
-
-    elif method == 'average':
-        generic_room_fr.error = np.mean(errors, axis=0)
-
+    if errors.shape[0] > 1:
+        # Combine errors
+        if method == 'conservative':
+            # Conservative error curve is zero everywhere else but on indexes where both have the same sign,
+            # at these indexes the smaller absolute value is selected.
+            # This ensures that no curve will be adjusted to the other side of zero
+            mask = np.mean(errors > 0, axis=0)  # Average from boolean values per column
+            positive = mask == 1  # Mask for columns with only positive values
+            negative = mask == 0  # Mask for columns with only negative values
+            # Minimum value for columns with only positive values
+            room_fr.error[positive] = np.min(errors[:, positive], axis=0)
+            # Maximum value for columns with only negative values (minimum absolute value)
+            room_fr.error[negative] = np.max(errors[:, negative], axis=0)
+            # Smoothen out kinks
+            room_fr.smoothen_fractional_octave(window_size=1 / 6, treble_window_size=1 / 6)
+            room_fr.error = room_fr.error_smoothed.copy()
+        elif method == 'average':
+            room_fr.error = np.mean(errors, axis=0)
+            room_fr.smoothen_fractional_octave(window_size=1/3, treble_window_size=1/3)
+        else:
+            raise ValueError(
+                f'Invalid value "{method}" for method. Supported values are "conservative" and "average"')
     else:
-        raise ValueError(
-            f'Invalid value "{method}" for method. Supported values are "conservative" and "average"')
+        room_fr.error = errors[0, :]
+        room_fr.smoothen_fractional_octave(window_size=1 / 3, treble_window_size=1 / 3)
 
-    # Zero error above 1 kHz
-    start = np.argmax(generic_room_fr.frequency > 500)
-    end = np.argmax(generic_room_fr.frequency > 1000)
-    mask = np.concatenate([
-        np.zeros(start - 1 if start > 0 else 0),
-        signal.windows.hann(end - start),
-        np.zeros(len(generic_room_fr.frequency) - end)
-    ])
-    generic_room_fr.error *= mask
+    if limit > 0:
+        # Zero error above limit
+        start = np.argmax(room_fr.frequency > limit / 2)
+        end = np.argmax(room_fr.frequency > limit)
+        mask = np.concatenate([
+            np.ones(start if start > 0 else 0),
+            signal.windows.hann(end - start),
+            np.zeros(len(room_fr.frequency) - end)
+        ])
+        room_fr.error *= mask
+        room_fr.error_smoothed *= mask
 
-    return generic_room_fr
+    if plot:
+        # Create dir
+        room_plots_dir = os.path.join(dir_path, 'plots', 'room')
+        os.makedirs(room_plots_dir, exist_ok=True)
+
+        # Create generic FR plot
+        fr = room_fr.copy()
+        fr.name = 'Generic room measurement'
+        fr.raw = fr.smoothed.copy()
+        fr.error = fr.error_smoothed.copy()
+
+        # Create figure and axes
+        fig, ax = plt.subplots()
+        fig.set_size_inches(15, 9)
+        config_fr_axis(ax)
+        ax.set_title('Generic room measurement')
+
+        # Plot target, raw and error
+        ax.plot(fr.frequency, fr.target, color=COLORS['lightpurple'], linewidth=5, label='Target')
+        for raw in raws:
+            raw.smoothen_fractional_octave(window_size=1/3, treble_window_size=1/3)
+            ax.plot(raw.frequency, raw.smoothed, color='grey', linewidth=0.5)
+        ax.plot(fr.frequency, fr.raw, color=COLORS['blue'], label='Raw smoothed')
+        ax.plot(fr.frequency, fr.error, color=COLORS['red'], label='Error smoothed')
+        ax.legend()
+
+        # Set y limits
+        sl = np.logical_and(fr.frequency >= 20, fr.frequency <= 20000)
+        stack = np.vstack([
+            fr.raw[sl],
+            fr.error[sl],
+            fr.target[sl]
+        ])
+        ax.set_ylim(get_ylim(stack, padding=0.1))
+
+        # Save FR figure
+        save_fig_as_png(os.path.join(room_plots_dir, 'room.png'), fig)
+        plt.close(fig)
+
+    return room_fr
 
 
 def open_room_target(estimator, dir_path, target=None):

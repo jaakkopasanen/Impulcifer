@@ -14,7 +14,7 @@ from scipy.ndimage import uniform_filter
 import nnresample
 from copy import deepcopy
 from autoeq.frequency_response import FrequencyResponse
-from utils import magnitude_response
+from utils import magnitude_response, get_ylim
 
 
 class ImpulseResponse:
@@ -453,11 +453,7 @@ class ImpulseResponse:
 
         if fix_ylim:
             # Y axis limits
-            lower = np.min(v)
-            upper = np.max(v)
-            diff = upper - lower
-            lower -= 0.1 * diff
-            upper += 0.1 * diff
+            lower, upper = get_ylim(v)
             ax.set_ylim([lower, upper])
 
         ax.legend(legend, fontsize=8)

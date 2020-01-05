@@ -95,6 +95,15 @@ def sync_axes(axes, sync_x=True, sync_y=True):
             ax.set_ylim(ylim)
 
 
+def get_ylim(x, padding=0.1):
+    lower = np.min(x)
+    upper = np.max(x)
+    diff = upper - lower
+    lower -= padding * diff
+    upper += padding * diff
+    return lower, upper
+
+
 def versus_distance(angle=30, distance=3, breadth=0.148, ear='primary', sound_field='reverberant', sound_velocity=343):
     """Calculates speaker-ear distance delta, dealy delta and SPL delta
 
