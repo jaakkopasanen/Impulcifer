@@ -57,81 +57,82 @@ def room_correction(
         # No room recording files found
         return None, None
 
-    # Crop heads and tails from room impulse responses
-    for speaker, pair in rir.irs.items():
-        for side, ir in pair.items():
-            ir.crop_head()
-    rir.crop_tails()
-    rir.write_wav(os.path.join(dir_path, 'room-responses.wav'))
-
-    figs = None
-    if plot:
-        # Plot all but frequency response
-        plot_dir = os.path.join(dir_path, 'plots', 'room')
-        os.makedirs(plot_dir, exist_ok=True)
-        figs = rir.plot(plot_fr=False, close_plots=False)
-
-    # Create equalization frequency responses
-    reference_gain = None
-    fr_axes = []
     frs = dict()
-    for speaker, pair in rir.irs.items():
-        frs[speaker] = dict()
-        for side, ir in pair.items():
-            # Create frequency response
-            fr = ir.frequency_response()
+    fr_axes = []
+    figs = None
+    if len(rir.irs):
+        # Crop heads and tails from room impulse responses
+        for speaker, pair in rir.irs.items():
+            for side, ir in pair.items():
+                ir.crop_head()
+        rir.crop_tails()
+        rir.write_wav(os.path.join(dir_path, 'room-responses.wav'))
 
-            if mic_calibration is not None:
-                # Calibrate frequency response
-                fr.raw -= mic_calibration.raw
+        if plot:
+            # Plot all but frequency response
+            plot_dir = os.path.join(dir_path, 'plots', 'room')
+            os.makedirs(plot_dir, exist_ok=True)
+            figs = rir.plot(plot_fr=False, close_plots=False)
 
-            # Sync gains
-            if reference_gain is None:
-                reference_gain = fr.center([100, 10000])  # Shifted (up) by this many dB
-            else:
-                fr.raw += reference_gain
+        # Create equalization frequency responses
+        reference_gain = None
+        for speaker, pair in rir.irs.items():
+            frs[speaker] = dict()
+            for side, ir in pair.items():
+                # Create frequency response
+                fr = ir.frequency_response()
 
-            # Adjust target level with the (negative) gain caused by speaker-ear distance in reverberant room
-            target_adjusted = target.copy()
-            target_adjusted.raw += IR_ROOM_SPL[speaker][side]
-            # Compensate with the adjusted room target
-            fr.compensate(target_adjusted, min_mean_error=False)
+                if mic_calibration is not None:
+                    # Calibrate frequency response
+                    fr.raw -= mic_calibration.raw
 
-            # Zero error above limit
-            if specific_limit > 0:
-                start = np.argmax(fr.frequency > specific_limit / 2)
-                end = np.argmax(fr.frequency > specific_limit)
-                mask = np.concatenate([
-                    np.ones(start if start > 0 else 0),
-                    signal.windows.hann(end - start),
-                    np.zeros(len(fr.frequency) - end)
-                ])
-                fr.error *= mask
+                # Sync gains
+                if reference_gain is None:
+                    reference_gain = fr.center([100, 10000])  # Shifted (up) by this many dB
+                else:
+                    fr.raw += reference_gain
 
-            # Add frequency response
-            frs[speaker][side] = fr
+                # Adjust target level with the (negative) gain caused by speaker-ear distance in reverberant room
+                target_adjusted = target.copy()
+                target_adjusted.raw += IR_ROOM_SPL[speaker][side]
+                # Compensate with the adjusted room target
+                fr.compensate(target_adjusted, min_mean_error=False)
 
-            if plot:
-                file_path = os.path.join(dir_path, 'plots', 'room', f'{speaker}-{side}.png')
-                fr = fr.copy()
-                fr.smoothen_fractional_octave(window_size=1/3, treble_window_size=1/3)
-                _, fr_ax = ir.plot_fr(
-                    fr=fr,
-                    fig=figs[speaker][side],
-                    ax=figs[speaker][side].get_axes()[4],
-                    plot_raw=False,
-                    plot_error=False,
-                    plot_file_path=file_path,
-                    fix_ylim=True
-                )
-                fr_axes.append(fr_ax)
+                # Zero error above limit
+                if specific_limit > 0:
+                    start = np.argmax(fr.frequency > specific_limit / 2)
+                    end = np.argmax(fr.frequency > specific_limit)
+                    mask = np.concatenate([
+                        np.ones(start if start > 0 else 0),
+                        signal.windows.hann(end - start),
+                        np.zeros(len(fr.frequency) - end)
+                    ])
+                    fr.error *= mask
+
+                # Add frequency response
+                frs[speaker][side] = fr
+
+                if plot:
+                    file_path = os.path.join(dir_path, 'plots', 'room', f'{speaker}-{side}.png')
+                    fr = fr.copy()
+                    fr.smoothen_fractional_octave(window_size=1/3, treble_window_size=1/3)
+                    _, fr_ax = ir.plot_fr(
+                        fr=fr,
+                        fig=figs[speaker][side],
+                        ax=figs[speaker][side].get_axes()[4],
+                        plot_raw=False,
+                        plot_error=False,
+                        plot_file_path=file_path,
+                        fix_ylim=True
+                    )
+                    fr_axes.append(fr_ax)
 
     if len(missing) > 0 and room_fr is not None:
         # Use generic measurement for speakers that don't have specific measurements
         for speaker in missing:
             frs[speaker] = {'left': room_fr.copy(), 'right': room_fr.copy()}
 
-    if plot:
+    if plot and figs is not None:
         room_plots_dir = os.path.join(dir_path, 'plots', 'room')
         os.makedirs(room_plots_dir, exist_ok=True)
         # Sync FR plot axes
