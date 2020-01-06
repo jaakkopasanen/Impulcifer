@@ -241,6 +241,32 @@ microphones because vast majority of measurement microphones are mono. Room reco
 only. Some measurement microphones like MiniDSP UMIK-1 are seen as stereo microphones by Windows and will for that
 reason record a stereo file. `recorder.py` can force the capture to be one channel by setting `--channels=1`.
 
+Generic room measurements can be done for speakers with which it's hard to position the measurement microphone
+correctly. Impulcifer reads these measurements from `room.wav` file which can contain any number of tracks and any
+number of sweeps per track. All the sweeps are being read and their frequency responses are combined. The combined
+frequency response is used for room correction with the speakers that don't have specific measurements
+(`room-FL,FR-left.wav` etc...).
+
+There are two methods for combining the frequency responses: `"average"` and `"conservative"`. Average method takes the
+average frequency response of all the measurements and builds the room correction equalization with that. Conservative
+method takes the absolute minimum error for each frequency and only if all the measurements are on the same side of 0
+level at the given frequency. This ensures that there will never be room correction adjustments that would make the
+frequency response of any of the measurements worse. These methods are available with `--fr_combination_method=average`
+and `--fr_combination_method=conservative`.
+
+Upper frequency limit for room measurements can be adjusted with parameters `--specific_limit` and `--generic_limit`.
+These will limit the room correction equalization to 0 dB above that frequency. This can be useful for avoiding pitfalls
+of room correction in high frequencies. In theory there should not be need to limit room correction with speaker-ear
+specific measurements if the measurement microphone was placed *exactly* in the same location as where the binaural
+microphone was but in practice this might not be the case always. Especially the frequencies above 10 kHz are very
+tricky and the gain is affected by a lot of small factors.
+
+Generic room measurements are not expected to be in the same location as the binaural microphones were so limiting the
+equalization to less than 1 kHz is probably a good idea. Conservative combination method with several measurements is
+safer method and with that it should be safer to try to increase the limit up from 1 kHz. For example
+`--specific_limit=5000 --generic_limit=2000` would ensure that room correction won't adjust frequency response of HRIR
+above 5 kHz for any speaker-ear pairs and above 2 kHz for speaker-ear pairs that don't have specific room measurements.
+
 Room measurements can be calibrated with the measurement microphone calibration file called `room-mic-calibration.txt`
 or `room-mic-calibration.csv`. This must be a CSV file where the first column contains frequencies and the second one
 amplitude data. Data is expected to be calibration data and not equalization data. This means that the calibration data
