@@ -210,11 +210,21 @@ def open_generic_room_measurement(estimator,
     # Average frequency responses of all tracks of the generic room measurement file
     irs = []
     for track in data:
-        ir = ImpulseResponse(estimator.estimate(track), estimator.fs, track)
-        # Crop harmonic distortion from the head
-        # Noise in the tail should not affect frequency response so it doesn't have to be cropped
-        ir.crop_head(head_ms=1)
-        irs.append(ir)
+        n_cols = int(round((len(track) / estimator.fs - 2) / (estimator.duration + 2)))
+        for i in range(n_cols):
+            # Starts at 2 seconds in the beginning plus previous sweeps and their tails
+            start = int(2 * estimator.fs + i * (2 * estimator.fs + len(estimator)))
+            # Ends at start plus one more (current) sweep
+            end = int(start + 2 * estimator.fs + len(estimator))
+            end = min(end, len(track))
+            # Select current sweep
+            sweep = track[start:end]
+            # Deconvolve as impulse response
+            ir = ImpulseResponse(estimator.estimate(sweep), estimator.fs, sweep)
+            # Crop harmonic distortion from the head
+            # Noise in the tail should not affect frequency response so it doesn't have to be cropped
+            ir.crop_head(head_ms=1)
+            irs.append(ir)
 
     # Frequency response for the generic room measurement
     room_fr = FrequencyResponse(
