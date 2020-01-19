@@ -6,7 +6,7 @@ import argparse
 import numpy as np
 from scipy import signal
 import matplotlib.pyplot as plt
-sys.path.insert(1, os.path.realpath(os.path.join(sys.path[0], os.pardir)))
+sys.path.insert(1, os.path.realpath(os.path.join(sys.path[0], os.pardir, os.pardir)))
 from utils import read_wav, write_wav
 from constants import HEXADECAGONAL_TRACK_ORDER, HESUVI_TRACK_ORDER, SPEAKER_NAMES
 
@@ -18,30 +18,30 @@ def main():
     parser.add_argument('--file', type=str, required=True, help='Path to HRIR or HeSuVi file.')
     parser.add_argument('--track_order', type=str, required=True,
                         help='Track order in HRIR file. "hesuvi" or "hexadecagonal"')
-    parser.add_argument('--times', type=str, default=argparse.SUPPRESS,
+    parser.add_argument('--reverb', type=str, default=argparse.SUPPRESS,
                         help='Reverberation times for different channels in milliseconds. During this time the '
                              'reverberation tail will be reduced by 100 dB. A comma separated list of channel name and '
                              'reverberation time pairs, separated by colon. If only a single numeric value is given, '
                              'it is used for all channels. When some channel names are give but not all, the missing '
                              'channels are not affected. Must be at least 3 ms smaller than the HRIR length. '
-                             'For example "--time=300" or '
-                             '"--time=FL:500,FC:100,FR:500,SR:700,BR:700,BL:700,SL:700" or '
-                             '"--time=FC:100".')
+                             'For example "--reverb=300" or '
+                             '"--reverb=FL:500,FC:100,FR:500,SR:700,BR:700,BL:700,SL:700" or '
+                             '"--reverb=FC:100".')
     args = parser.parse_args()
     file_path = args.file
     track_order = args.track_order
-    times = dict()
+    reverb = dict()
     try:
         # Single float value
-        times = {ch: float(args.times) / 1000 for ch in SPEAKER_NAMES}
+        reverb = {ch: float(args.reverb) / 1000 for ch in SPEAKER_NAMES}
     except ValueError:
         # Channels separated
-        for ch_t in args.times.split(','):
-            times[ch_t.split(':')[0].upper()] = float(ch_t.split(':')[1]) / 1000
+        for ch_t in args.reverb.split(','):
+            reverb[ch_t.split(':')[0].upper()] = float(ch_t.split(':')[1]) / 1000
 
     fs, data = read_wav(file_path)
 
-    for ch, t in times.items():
+    for ch, t in reverb.items():
         print(f'{ch}: {t*1000:.0f}ms')
         n_ones = int(fs * 0.003)
         n_win = int(fs * t)
