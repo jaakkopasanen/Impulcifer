@@ -292,12 +292,23 @@ files `eq-left.csv` and `eq-right.csv`. Headphone equalization is useful for in-
 to do headphone compensation with IEMs. When using IEMS you still need an around ear headphone for the headphone
 compensation. **eq.wav is no longer supported!**
 
-The way to do this is to create an equalization FIR filter which makes the IEM sound like the around ear headphone and
-saving this FIR filter into the folder as `eq.wav`. Impulcifer will then bake the frequency response transformation
-into the HRIR and you can enjoy speaker sound with your IEMs. You can generate this filter with
-[AutoEQ](https://github.com/jaakkopasanen/AutoEq), see usage instructions for
-[using sound signatures](https://github.com/jaakkopasanen/AutoEq#using-sound-signatures) to learn how to transfer one
-headphone into another.
+Impulcifer will bake the frequency response transformation from the CSV file into the HRIR and you can enjoy speaker
+sound with your IEMs. You can generate this filter with [AutoEQ](https://github.com/jaakkopasanen/AutoEq); see usage
+instructions for [using sound signatures](https://github.com/jaakkopasanen/AutoEq#using-sound-signatures) to learn how 
+to transfer one headphone into another. In this case the input directory needs to point to the IEM, compensation curve
+is the curve of the measurement system used to measure the IEM and the sound signature needs point to the existing
+result of the headphone which was used to make the headphone compensation recording.
+
+For example if the headphone compensation recording was made with Sennheiser HD 650 and you want to enjoy Impulcifer
+produced HRIR with Campfire Andromeda, you should run:
+```bash
+python frequency_response.py --input_dir="oratory1990/data/inear/Campfire Audio Andromeda" --output_dir="my_results/Andromeda (HD 650)" --compensation="compensation/harman_over-ear_2018_wo_bass.csv" --sound_signature="results/oratory1990/harman_over-ear_2018/Sennheiser HD 650/Sennheiser HD 650.csv" --equalize --bass_boost=4 --max_gain=6
+```
+and then copy `AutoEq/my_results/Andromeda (HD 650)/Campfire Audio Andromeda.csv` to `Impulcifer/data/my_hrir/eq.csv`.
+
+See how the Harman over-ear target is used for IEM in this case. This is because the goal is to make Andromeda sound as
+similar as possible to HD 650, which is an over-ear headphone. Normally with AutoEQ you would use Harman in-ear target
+for IEMs but not in this case.
 
 Headphone compensation can be skipped by adding a command line argument `--no_headphone_compensation` without any value.
 
