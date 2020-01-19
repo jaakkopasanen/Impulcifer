@@ -1,5 +1,6 @@
 # Reverberation Management
-This script crops the reverberant tails of impulse responses in HRIR file.
+This script crops the reverberant tails of impulse responses in HRIR file. Output is written to `cropped.wav` inside
+this directory.
 
 ## Usage
 ```
@@ -26,6 +27,9 @@ optional arguments:
 
 for example running this from project root:
 ```bash
+# Windows
+python research\reverberation-management\reverberation_management.py --file="data/my_hrir/hesuvi.wav" --track_order=hesuvi --times=FC:300
+# Linux and Mac
 python research/reverberation-management/reverberation_management.py --file="data/my_hrir/hesuvi.wav" --track_order=hesuvi --times=FC:300
 ```
 would reduce center channel impulse responses' tails to 300 milliseconds improving speech intelligibility for movies.
