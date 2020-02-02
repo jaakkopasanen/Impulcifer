@@ -27,6 +27,10 @@ def main(dir_path=None,
          fr_combination_method='average',
          specific_limit=20000,
          generic_limit=1000,
+         bass_boost_gain=0.0,
+         bass_boost_fc=105,
+         bass_boost_q=0.76,
+         tilt=0.0,
          do_room_correction=True,
          do_headphone_compensation=True,
          do_equalization=True):
@@ -62,6 +66,9 @@ def main(dir_path=None,
     eq_left, eq_right = None, None
     if do_equalization:
         eq_left, eq_right = equalization(estimator, dir_path)
+
+    # Bass boost and tilt
+    target = create_target(estimator, bass_boost_gain, bass_boost_fc, bass_boost_q, tilt)
 
     # HRIR measurements
     hrir = open_binaural_measurements(estimator, dir_path)
@@ -106,6 +113,9 @@ def main(dir_path=None,
                 if eq is not None and type(eq) == FrequencyResponse:
                     # Equalization
                     fr.error += eq.error
+
+                # Remove bass and tilt target from the error
+                fr.error -= target.raw
 
                 # Smoothen and equalize
                 fr.smoothen_heavy_light()
@@ -306,6 +316,28 @@ def headphone_compensation(estimator, dir_path):
     return left, right
 
 
+def create_target(estimator, bass_boost_gain, bass_boost_fc, bass_boost_q, tilt):
+    """Creates target frequency response with bass boost, tilt and high pass at 20 Hz"""
+    target = FrequencyResponse(
+        name='bass_and_tilt',
+        frequency=FrequencyResponse.generate_frequencies(f_min=10, f_max=estimator.fs / 2, f_step=1.01)
+    )
+    target.raw = target.create_target(
+        bass_boost_gain=bass_boost_gain,
+        bass_boost_fc=bass_boost_fc,
+        bass_boost_q=bass_boost_q,
+        tilt=tilt
+    )
+    high_pass = FrequencyResponse(
+        name='high_pass',
+        frequency=[10, 18, 19, 20, 21, 22, 20000],
+        raw=[-80, -5, -1.6, -0.6, -0.2, 0, 0]
+    )
+    high_pass.interpolate(f_min=10, f_max=estimator.fs / 2, f_step=1.01)
+    target.raw += high_pass.raw
+    return target
+
+
 def open_binaural_measurements(estimator, dir_path):
     """Opens binaural measurement WAV files.
 
@@ -428,7 +460,33 @@ def create_cli():
                             help='Upper limit for room equalization with generic room measurements. '
                                  'Equalization will drop down to 0 dB at this frequency in the leading octave. 0 '
                                  'disables limit.')
+    arg_parser.add_argument('--bass_boost', type=str, default=argparse.SUPPRESS,
+                            help='Bass boost shelf. Sub-bass frequencies will be boosted by this amount. Can be '
+                                 'either a single value for a gain in dB or a comma separated list of three values for '
+                                 'parameters of a low shelf filter, where the first is gain in dB, second is center '
+                                 'frequency (Fc) in Hz and the last is quality (Q). When only a single value (gain) is '
+                                 'given, default values for Fc and Q are used which are 105 Hz and 0.76, respectively. '
+                                 'For example "--bass_boost=6" or "--bass_boost=6,150,0.69".')
+    arg_parser.add_argument('--tilt', type=float, default=argparse.SUPPRESS,
+                            help='Target tilt in dB/octave. Positive value (upwards slope) will result in brighter '
+                                 'frequency response and negative value (downwards slope) will result in darker '
+                                 'frequency response. 1 dB/octave will produce nearly 10 dB difference in '
+                                 'desired value between 20 Hz and 20 kHz. Tilt is applied with bass boost and both '
+                                 'will affect the bass gain.')
     args = vars(arg_parser.parse_args())
+    if 'bass_boost' in args:
+        bass_boost = args['bass_boost'].split(',')
+        if len(bass_boost) == 1:
+            args['bass_boost_gain'] = float(bass_boost[0])
+            args['bass_boost_fc'] = 105
+            args['bass_boost_q'] = 0.76
+        elif len(bass_boost) == 3:
+            args['bass_boost_gain'] = float(bass_boost[0])
+            args['bass_boost_fc'] = float(bass_boost[1])
+            args['bass_boost_q'] = float(bass_boost[2])
+        else:
+            raise ValueError('"--bass_boost" must have one value or three values separated by commas!')
+        del args['bass_boost']
     return args
 
 

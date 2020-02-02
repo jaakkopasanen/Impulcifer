@@ -277,7 +277,7 @@ file is with a command line argument `--room_mic_calibration` and it takes a pat
 Room frequency response target is read from a file called `room-target.txt` or `room-target.csv`. Head related impulse
 responses will be equalized with the difference between room response measurements and room response target. An
 alternative way to pass in the target file is with a command line argument `--room_target` eg.
-`--room_target="data/harman-room-target.csv"`.
+`--room_target="data/harman-in-room-loudspeaker-target.csv"`.
 
 Room correction can be skipped by adding a command line argument `--no_room_correction` without any value.
 
