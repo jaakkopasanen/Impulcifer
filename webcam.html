@@ -32,7 +32,7 @@
             position: relative;
         }
         #shutter, #ghost {
-            transform: scaleX(-1);
+            /*transform: scaleX(-1);*/
             position: absolute;
             width: 100%;
             box-sizing: border-box;
@@ -62,7 +62,7 @@
             flex-direction: column;
         }
         #snaps .snap {
-            transform: scaleX(-1);
+            /*transform: scaleX(-1);*/
             box-sizing: border-box;
             border-radius: 16px;
             margin: 8px 8px 0 8px;
@@ -103,7 +103,7 @@
 <!-- Reference to your JavaScript file -->
 <script>
     // Set constraints for the video stream
-    let constraints = { video: { facingMode: "user" }, audio: false };
+    let constraints = { video: { facingMode: "user", width: {min: 1270}, height: {min: 720} }, audio: false };
 
     // Define constants
     const shutter = document.querySelector("#shutter");

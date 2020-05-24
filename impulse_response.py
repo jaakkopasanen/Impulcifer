@@ -501,7 +501,7 @@ class ImpulseResponse:
         z_min = -100
 
         # Window
-        window_duration = 0.05  # TODO
+        window_duration = 0.01  # TODO
         nfft = min(int(self.fs * window_duration), int(len(self.data) / 10))
         noverlap = int(nfft * 0.9)  # 90% overlap TODO
         ascend_ms = 10  # 10 ms ascending window
@@ -532,7 +532,7 @@ class ImpulseResponse:
         # Interpolate to logaritmic frequency scale
         f_max = self.fs / 2
         f_min = 10
-        step = 1.1
+        step = 1.03
         f = np.array([f_min * step ** i for i in range(int(np.log(f_max / f_min) / np.log(step)))])
         log_f_spec = np.ones((len(f), spectrum.shape[1]))
         for i in range(spectrum.shape[1]):
@@ -556,8 +556,7 @@ class ImpulseResponse:
         z = z[1:-1, :-1]
 
         # Surface plot
-        vmin = -100
-        ax.plot_surface(t, f, z, cmap='magma', antialiased=True, vmin=z_min, vmax=0)
+        ax.plot_surface(t, f, z, rcount=len(t), ccount=len(f), cmap='magma', antialiased=True, vmin=z_min, vmax=0)
 
         # Z axis
         ax.set_zlim([z_min, 0])
