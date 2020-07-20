@@ -37,7 +37,8 @@ You should be able to simply copy and paste in these commands.
 ```bash
 pip install virtualenv
 ```
-- Git clone Impulcifer. This will create a folder in your home folder called `Impulcifer`.  
+- Git clone Impulcifer. This will create a folder in your home folder called `Impulcifer`. See [Updating](#updating)
+for other versions than the latest.  
 ```bash
 git clone https://github.com/jaakkopasanen/Impulcifer
 ```
@@ -75,10 +76,23 @@ source venv/bin/activate
 ```
 
 ### Updating
-Impulcifer is under active development and updates quite frequently. You can update your own copy by running:
+Impulcifer is under active development and updates quite frequently. Take a look at the [Changelog](./CHANGELOG.md) to
+see what has changed.
+
+Versions in Changelog have Git tags with which you can switch to another version than the latest one:
 ```bash
+# Check available versions
+git tag
+# Update to a specific version
+git checkout 1.0.0
+```
+
+You can update your own copy to the latest versions by running:
+```bash
+git checkout master
 git pull
 ```
+
 required packages change quite rarely but sometimes they do and then it's necessary to upgrade them
 ```bash
 pip install -U -r requirements.txt

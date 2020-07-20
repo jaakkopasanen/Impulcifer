@@ -4,7 +4,7 @@ import os
 import warnings
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy import signal
+from scipy import signal, fftpack
 from PIL import Image
 from autoeq.frequency_response import FrequencyResponse
 from impulse_response import ImpulseResponse
@@ -240,7 +240,7 @@ class HRIR:
         seconds_per_octave = len(self.estimator) / self.estimator.fs / self.estimator.n_octaves
         fade_out = 2 * int(self.fs * seconds_per_octave * (1 / 24))
         window = signal.hanning(fade_out)[fade_out // 2:]
-        tail_ind = max(tail_indices)
+        tail_ind = fftpack.next_fast_len(max(tail_indices))
         for speaker, pair in self.irs.items():
             for ir in pair.values():
                 ir.data = ir.data[:tail_ind]

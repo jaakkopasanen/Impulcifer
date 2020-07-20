@@ -42,11 +42,13 @@ def main(dir_path=None,
     dir_path = os.path.abspath(dir_path)
 
     # Impulse response estimator
+    print('Creating impulse response estimator...')
     estimator = open_impulse_response_estimator(dir_path, file_path=test_signal)
 
     # Room correction frequency responses
     room_frs = None
     if do_room_correction:
+        print('Running room correction...')
         _, room_frs = room_correction(
             estimator, dir_path,
             target=room_target,
@@ -60,17 +62,21 @@ def main(dir_path=None,
     # Headphone compensation frequency responses
     hp_left, hp_right = None, None
     if do_headphone_compensation:
+        print('Running headphone compensation...')
         hp_left, hp_right = headphone_compensation(estimator, dir_path)
 
     # Equalization
     eq_left, eq_right = None, None
     if do_equalization:
+        print('Creating headphone equalization...')
         eq_left, eq_right = equalization(estimator, dir_path)
 
     # Bass boost and tilt
+    print('Creating frequency response target...')
     target = create_target(estimator, bass_boost_gain, bass_boost_fc, bass_boost_q, tilt)
 
     # HRIR measurements
+    print('Opening binaural measurements...')
     hrir = open_binaural_measurements(estimator, dir_path)
 
     # Write info and stats in readme
@@ -79,9 +85,11 @@ def main(dir_path=None,
     if plot:
         # Plot graphs pre processing
         os.makedirs(os.path.join(dir_path, 'plots', 'pre'), exist_ok=True)
+        print('Plotting BRIR graphs before processing...')
         hrir.plot(dir_path=os.path.join(dir_path, 'plots', 'pre'))
 
     # Crop noise and harmonics from the beginning
+    print('Cropping impulse responses...')
     hrir.crop_heads()
 
     # Crop noise from the tail
@@ -92,6 +100,7 @@ def main(dir_path=None,
 
     # Equalize all
     if do_headphone_compensation or do_room_correction or do_equalization:
+        print('Equalizing...')
         for speaker, pair in hrir.irs.items():
             for side, ir in pair.items():
                 fr = FrequencyResponse(
@@ -122,19 +131,21 @@ def main(dir_path=None,
                 fr.equalize(max_gain=40, treble_f_lower=10000, treble_f_upper=estimator.fs / 2)
 
                 # Create FIR filter and equalize
-                # FIXME: This is 50% of execution time
                 fir = fr.minimum_phase_impulse_response(fs=estimator.fs, normalize=False, f_res=5)
                 ir.equalize(fir)
 
     # Correct channel balance
     if channel_balance is not None:
         # FIXME: This is 25% of execution time
+        print('Correcting channel balance...')
         hrir.correct_channel_balance(channel_balance)
 
     # Normalize gain
+    print('Normalizing gain...')
     hrir.normalize(peak_target=None if target_level is not None else -0.1, avg_target=target_level)
 
     if plot:
+        print('Plotting BRIR graphs after processing...')
         # Convolve test signal, re-plot waveform and spectrogram
         for speaker, pair in hrir.irs.items():
             for side, ir in pair.items():
@@ -143,14 +154,17 @@ def main(dir_path=None,
         hrir.plot(os.path.join(dir_path, 'plots', 'post'))
 
     # Plot results, always
+    print('Plotting results...')
     hrir.plot_result(os.path.join(dir_path, 'plots'))
 
     # Re-sample
     if fs is not None and fs != hrir.fs:
+        print(f'Resampling BRIR to {fs} Hz')
         hrir.resample(fs)
         hrir.normalize(peak_target=None if target_level is not None else -0.1, avg_target=target_level)
 
     # Write multi-channel WAV file with standard track order
+    print('Writing BRIRs...')
     hrir.write_wav(os.path.join(dir_path, 'hrir.wav'))
 
     # Write multi-channel WAV file with HeSuVi track order
