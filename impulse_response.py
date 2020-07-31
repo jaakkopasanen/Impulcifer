@@ -167,6 +167,9 @@ class ImpulseResponse:
 
             # 9. A new knee_point is found.
             knee_point_time = (noise_floor - late_intercept) / late_slope
+            if knee_point_time > t_windows[-1]:
+                knee_point_time = t_windows[-1]
+                break
             knee_point_index = np.argwhere(t_windows >= knee_point_time)[0, 0]
             knee_point_value = windows[knee_point_index]
             print(f'      Knee point: {knee_point_value:.2f} dB @ {knee_point_time * 1000:.0f} ms')
@@ -174,6 +177,7 @@ class ImpulseResponse:
             new_knee_point_index = np.argwhere(t_windows >= knee_point_time)[0, 0]
             if new_knee_point_index == knee_point_index:
                 # Converged
+                knee_point_time = t_windows[-1]
                 break
 
         # t = np.linspace(peak_index / self.fs, peak_index / self.fs + 2, 2 * self.fs)
