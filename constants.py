@@ -40,7 +40,7 @@ for _speaker in SPEAKER_NAMES:
         )[2]
 
 COLORS = {
-    'ligthblue': '#7db4db',
+    'lightblue': '#7db4db',
     'blue': '#1f77b4',
     'pink': '#dd8081',
     'red': '#d62728',

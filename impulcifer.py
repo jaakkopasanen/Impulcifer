@@ -395,6 +395,8 @@ def write_readme(file_path, hrir, fs):
     if fs is None:
         fs = hrir.fs
 
+    rt_name = 'Reverb'
+    rt = None
     table = []
     speaker_names = sorted(hrir.irs.keys(), key=lambda x: SPEAKER_NAMES.index(x))
     for speaker in speaker_names:
@@ -403,18 +405,32 @@ def write_readme(file_path, hrir, fs):
         for side, ir in pair.items():
             # Zero for the first ear
             _itd = itd if side == 'left' and speaker[1] == 'R' or side == 'right' and speaker[1] == 'L' else 0.0
-            reverb_time = ir.reverberation_time(target_level=-60)
+            # Use the largest decay time parameter available
+            peak_ind, knee_point_ind, noise_floor, window_size = ir.decay_params()
+            edt, rt20, rt30, rt60 = ir.decay_times(peak_ind, knee_point_ind)
+            if rt60 is not None:
+                rt_name = 'RT60'
+                rt = rt60
+            elif rt30 is not None:
+                rt_name = 'RT30'
+                rt = rt30
+            elif rt20 is not None:
+                rt_name = 'RT20'
+                rt = rt20
+            elif edt is not None:
+                rt_name = 'EDT'
+                rt = edt
             table.append([
                 speaker,
                 side,
-                f'{ir.pnr():.1f} dB',
+                f'{noise_floor:.1f} dB',
                 f'{_itd:.1f} us',
-                f'{ir.active_duration() * 1000:.1f} ms',
-                f'{reverb_time * 1000:.1f} ms' if reverb_time is not None else '-'
+                f'{(knee_point_ind - peak_ind) / ir.fs * 1000:.1f} ms',
+                f'{rt * 1000:.1f} ms' if rt is not None else '-'
             ])
     table_str = tabulate(
         table,
-        headers=['Speaker', 'Side', 'PNR', 'ITD', 'Length', 'RT60'],
+        headers=['Speaker', 'Side', 'PNR', 'ITD', 'Length', rt_name],
         tablefmt='github'
     )
     s = f'''# HRIR

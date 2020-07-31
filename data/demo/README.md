@@ -1,22 +1,22 @@
 # HRIR
 
-**Date:** 2020-05-24 12:43  
+**Date:** 2020-07-31 15:24  
 **Input sampling rate:** 48000 Hz  
 **Output sampling rate:** 48000 Hz  
 
-| Speaker   | Side   | PNR     | ITD       | Length   | RT60     |
-|-----------|--------|---------|-----------|----------|----------|
-| FL        | left   | 96.6 dB | 0.0 us    | 479.9 ms | 238.6 ms |
-| FL        | right  | 85.6 dB | 145.8 us  | 611.9 ms | 323.0 ms |
-| FR        | left   | 89.0 dB | 187.5 us  | 568.4 ms | 294.0 ms |
-| FR        | right  | 95.5 dB | 0.0 us    | 517.5 ms | 254.4 ms |
-| FC        | left   | 93.2 dB | 0.0 us    | 420.0 ms | 256.1 ms |
-| FC        | right  | 93.9 dB | 0.0 us    | 571.9 ms | 258.3 ms |
-| BL        | left   | 86.8 dB | 0.0 us    | 511.1 ms | 304.5 ms |
-| BL        | right  | 86.3 dB | 1187.5 us | 560.6 ms | 312.6 ms |
-| BR        | left   | 87.4 dB | 1125.0 us | 590.9 ms | 279.9 ms |
-| BR        | right  | 90.8 dB | 0.0 us    | 563.0 ms | 270.5 ms |
-| SL        | left   | 94.8 dB | 0.0 us    | 556.9 ms | 243.5 ms |
-| SL        | right  | 84.8 dB | 1333.3 us | 508.6 ms | 313.4 ms |
-| SR        | left   | 82.2 dB | 1145.8 us | 500.1 ms | 356.0 ms |
-| SR        | right  | 96.6 dB | 0.0 us    | 597.1 ms | 237.2 ms |
+| Speaker   | Side   | PNR      | ITD       | Length   | RT60     |
+|-----------|--------|----------|-----------|----------|----------|
+| FL        | left   | -97.3 dB | 0.0 us    | 450.7 ms | 399.7 ms |
+| FL        | right  | -85.8 dB | 145.8 us  | 480.2 ms | 447.7 ms |
+| FR        | left   | -89.6 dB | 187.5 us  | 439.7 ms | 399.2 ms |
+| FR        | right  | -95.8 dB | 0.0 us    | 466.5 ms | 410.7 ms |
+| FC        | left   | -94.8 dB | 0.0 us    | 456.3 ms | 419.4 ms |
+| FC        | right  | -94.1 dB | 0.0 us    | 437.8 ms | 395.9 ms |
+| BL        | left   | -87.3 dB | 0.0 us    | 456.9 ms | 421.9 ms |
+| BL        | right  | -86.3 dB | 1187.5 us | 466.2 ms | 470.9 ms |
+| BR        | left   | -87.6 dB | 1125.0 us | 477.3 ms | 457.9 ms |
+| BR        | right  | -91.1 dB | 0.0 us    | 423.4 ms | 385.0 ms |
+| SL        | left   | -95.0 dB | 0.0 us    | 440.3 ms | 399.6 ms |
+| SL        | right  | -85.2 dB | 1333.3 us | 459.0 ms | 449.7 ms |
+| SR        | left   | -82.8 dB | 1145.8 us | 529.8 ms | 531.9 ms |
+| SR        | right  | -96.5 dB | 0.0 us    | 416.8 ms | 369.8 ms |

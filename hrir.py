@@ -233,8 +233,9 @@ class HRIR:
         # Find indices after which there is only noise in each track
         tail_indices = []
         for speaker, pair in self.irs.items():
-            for ir in pair.values():
-                tail_indices.append(ir.tail_index())
+            for side, ir in pair.items():
+                _, tail_ind, _, _ = ir.decay_params()
+                tail_indices.append(tail_ind)
 
         # Crop all tracks by last tail index
         seconds_per_octave = len(self.estimator) / self.estimator.fs / self.estimator.n_octaves

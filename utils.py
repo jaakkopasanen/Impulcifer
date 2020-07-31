@@ -184,3 +184,8 @@ def config_fr_axis(ax):
     ax.grid(True, which='major')
     ax.grid(True, which='minor')
     ax.xaxis.set_major_formatter(ticker.StrMethodFormatter('{x:.0f}'))
+
+
+def running_mean(x, N):
+    cumsum = np.cumsum(np.insert(x, 0, 0))
+    return (cumsum[N:] - cumsum[:-N]) / float(N)
