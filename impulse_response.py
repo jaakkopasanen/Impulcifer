@@ -136,7 +136,10 @@ class ImpulseResponse:
             # 7. The background noise level is determined again. The evaluated noise segment should start from a
             # point corresponding to 5–10 dB of decay after the knee_point, or a minimum of 10 % of the total
             # response length.
-            noise_floor_start_index = np.argwhere(windows <= knee_point_value - 5)[0, 0]
+            try:
+                noise_floor_start_index = np.argwhere(windows <= knee_point_value - 5)[0, 0]
+            except IndexError:
+                break
             noise_floor_start_time = max(t_windows[noise_floor_start_index], 0.1 * self.duration())
             # Protection against over shooting the impulse response end, in case the IR has been truncated already
             # In that case the noise floor will be calculated from the last half of the last window
@@ -159,12 +162,16 @@ class ImpulseResponse:
             # the noise level.
             slope_end_headroom = 8
             slope_dynamic_range = 20
-            slope_end = np.argwhere(windows <= noise_floor + slope_end_headroom)[0, 0] - 1  # 8 dB above noise level
-            slope_start = np.argwhere(windows <= noise_floor + (slope_end_headroom + slope_dynamic_range))[0, 0] - 1
-            late_slope, late_intercept, _, _, _ = stats.linregress(
-                t_windows[slope_start:slope_end],
-                windows[slope_start:slope_end]
-            )
+            try:
+                slope_end = np.argwhere(windows <= noise_floor + slope_end_headroom)[0, 0] - 1  # 8 dB above noise level
+                slope_start = np.argwhere(windows <= noise_floor + (slope_end_headroom + slope_dynamic_range))[0, 0] - 1
+                late_slope, late_intercept, _, _, _ = stats.linregress(
+                    t_windows[slope_start:slope_end],
+                    windows[slope_start:slope_end]
+                )
+            except (IndexError, ValueError):
+                # Problems with already cropped IR tail
+                break
             # print(f'      Late slope {t_windows[slope_start] * 1000:.0f} ms -> {t_windows[slope_end] * 1000:.0f} ms: {late_slope:.1f}t + {late_intercept:.2f}')
 
             # 9. A new knee_point is found.
@@ -309,23 +316,27 @@ class ImpulseResponse:
         edt, rt20, rt30, rt60 = self.decay_times()
         rt_slope = None
         # Finds largest available decay time parameter
-        for rt_time, rt_level in [(edt, 10), (rt20, 20), (rt30, 30), (rt60, 60)]:
+        for rt_time, rt_level in [(edt, -10), (rt20, -20), (rt30, -30), (rt60, -60)]:
             if not rt_time:
                 break
             rt_slope = rt_level / rt_time
 
-        target_slope = 60 / target  # Target dB/s
+        target_slope = -60 / target  # Target dB/s
+        if target_slope > rt_slope:
+            # We're not going to adjust decay and noise floor up
+            return
         knee_point_time = knee_point_index / self.fs
         knee_point_level = rt_slope * knee_point_time  # Extrapolated level at knee point
         target_level = target_slope * knee_point_time  # Target level at knee point
         window_level = target_level - knee_point_level  # Adjustment level at knee point
-        half_window = knee_point_index - peak_index  # Half Hanning window length, from peak to knee
+        window_start = peak_index + 2 * (self.fs // 1000)
+        half_window = knee_point_index - window_start  # Half Hanning window length, from peak to knee
         window = np.concatenate([  # Adjustment window
-            np.ones(peak_index),  # Start with ones until peak
+            np.ones(window_start),  # Start with ones until peak
             signal.windows.hann(half_window * 2)[half_window:],  # Slope down to knee point
             np.zeros(len(self) - knee_point_index)  # Fill with zeros to full length
         ]) - 1.0  # Slopes down from 0.0 to -1.0
-        window *= window_level  # Scale with adjustment level at knee point
+        window *= -window_level  # Scale with adjustment level at knee point
         window = 10 ** (window / 20)  # Linear scale
         self.data *= window  # Scale impulse response data wit the window
 
@@ -641,7 +652,6 @@ class ImpulseResponse:
         squared /= np.max(np.abs(squared))
         squared = squared[start:end] ** 2
         avg = running_mean(squared, window_size)
-        #avg = signal.savgol_filter(squared, window_size if window_size % 2 else window_size - 1, 1)
         squared = 10 * np.log10(squared + 1e-24)
         avg = 10 * np.log10(avg + 1e-24)
 

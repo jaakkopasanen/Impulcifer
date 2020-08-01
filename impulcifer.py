@@ -23,6 +23,7 @@ def main(dir_path=None,
          fs=None,
          plot=False,
          channel_balance=None,
+         decay=None,
          target_level=None,
          fr_combination_method='average',
          specific_limit=20000,
@@ -134,9 +135,16 @@ def main(dir_path=None,
                 fir = fr.minimum_phase_impulse_response(fs=estimator.fs, normalize=False, f_res=5)
                 ir.equalize(fir)
 
+    # Adjust decay time
+    if decay:
+        print('Adjusting decay time...')
+        for speaker, pair in hrir.irs.items():
+            for side, ir in pair.items():
+                if speaker in decay:
+                    ir.adjust_decay(decay[speaker])
+
     # Correct channel balance
     if channel_balance is not None:
-        # FIXME: This is 25% of execution time
         print('Correcting channel balance...')
         hrir.correct_channel_balance(channel_balance)
 
@@ -475,6 +483,15 @@ def create_cli():
                                  'or attenuate right side relative to left side by the number of dBs. "mids" is the '
                                  'same as the numerical values but guesses the value automatically from mid frequency '
                                  'levels.')
+    arg_parser.add_argument('--decay', type=str, default=argparse.SUPPRESS,
+                            help='Target decay time in milliseconds to reach -60 dB. When the natural decay time is '
+                                 'longer than the target decay time, a downward slope will be applied to decay tail. '
+                                 'Decay cannot be increased with this. By default no decay time adjustment is done. '
+                                 'A comma separated list of channel name and  reverberation time pairs, separated by '
+                                 'a colon. If only a single numeric value is given, it is used for all channels. When '
+                                 'some channel names are give but not all, the missing channels are not affected. For '
+                                 'example "--decay=300" or "--decay=FL:500,FC:100,FR:500,SR:700,BR:700,BL:700,SL:700" '
+                                 'or "--decay=FC:100".')
     arg_parser.add_argument('--target_level', type=float, default=argparse.SUPPRESS,
                             help='Target average gain level for left and right channels. This will sum together all '
                                  'left side impulse responses and right side impulse responses respectively and take '
@@ -522,6 +539,16 @@ def create_cli():
         else:
             raise ValueError('"--bass_boost" must have one value or three values separated by commas!')
         del args['bass_boost']
+    if 'decay' in args:
+        decay = dict()
+        try:
+            # Single float value
+            decay = {ch: float(args['decay']) / 1000 for ch in SPEAKER_NAMES}
+        except ValueError:
+            # Channels separated
+            for ch_t in args['decay'].split(','):
+                decay[ch_t.split(':')[0].upper()] = float(ch_t.split(':')[1]) / 1000
+        args['decay'] = decay
     return args
 
 

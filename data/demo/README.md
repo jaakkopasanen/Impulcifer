@@ -1,6 +1,6 @@
 # HRIR
 
-**Date:** 2020-08-01 16:22  
+**Date:** 2020-08-01 17:49  
 **Input sampling rate:** 48000 Hz  
 **Output sampling rate:** 48000 Hz  
 
