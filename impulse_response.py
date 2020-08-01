@@ -235,13 +235,12 @@ class ImpulseResponse:
         avg /= np.max(np.abs(avg))  # Normalize
         avg = avg ** 2
         avg = running_mean(avg, window_size)
-        avg = 10 * np.log10(avg)
+        avg = 10 * np.log10(avg + 1e-18)
         # Find offset which minimizes difference between Schroeder backward integral and the moving average
         # ie. offset which moves Schroeder curve to same vertical position as the decay power curve
         # Limit the range 10% -> 90% of Schroeder and avg start and end
         fit_start = max(int(len(schroeder) * 0.1), avg_offset)  # avg could start after 10% of Schroeder
         fit_end = min(int(len(schroeder) * 0.9), avg_offset + (len(avg)))  # avg could end before 90% of Schroeder
-        print(f'ah={avg_head}, at={avg_tail}, ao={avg_offset}, fs={fit_start}, fe={fit_end}')
         offset = np.mean(
             schroeder[fit_start:fit_end] -
             avg[fit_start - avg_offset:fit_end - avg_offset]  # Shift avg indexes by the offset length
@@ -296,6 +295,39 @@ class ImpulseResponse:
             Convolved data
         """
         return signal.convolve(x, self.data, mode='full')
+
+    def adjust_decay(self, target):
+        """Adjusts decay time in place.
+
+        Args:
+            target: Target 60 dB decay time in seconds
+
+        Returns:
+            None
+        """
+        peak_index, knee_point_index, _, _ = self.decay_params()
+        edt, rt20, rt30, rt60 = self.decay_times()
+        rt_slope = None
+        # Finds largest available decay time parameter
+        for rt_time, rt_level in [(edt, 10), (rt20, 20), (rt30, 30), (rt60, 60)]:
+            if not rt_time:
+                break
+            rt_slope = rt_level / rt_time
+
+        target_slope = 60 / target  # Target dB/s
+        knee_point_time = knee_point_index / self.fs
+        knee_point_level = rt_slope * knee_point_time  # Extrapolated level at knee point
+        target_level = target_slope * knee_point_time  # Target level at knee point
+        window_level = target_level - knee_point_level  # Adjustment level at knee point
+        half_window = knee_point_index - peak_index  # Half Hanning window length, from peak to knee
+        window = np.concatenate([  # Adjustment window
+            np.ones(peak_index),  # Start with ones until peak
+            signal.windows.hann(half_window * 2)[half_window:],  # Slope down to knee point
+            np.zeros(len(self) - knee_point_index)  # Fill with zeros to full length
+        ]) - 1.0  # Slopes down from 0.0 to -1.0
+        window *= window_level  # Scale with adjustment level at knee point
+        window = 10 ** (window / 20)  # Linear scale
+        self.data *= window  # Scale impulse response data wit the window
 
     def magnitude_response(self):
         """Calculates magnitude response for the data."""
@@ -619,7 +651,7 @@ class ImpulseResponse:
             label=f'{window_size / self.fs *1000:.0f} ms moving average'
         )
 
-        ax.set_ylim([noise_floor * 1.5, 0])
+        ax.set_ylim([np.min(avg) * 1.2, 0])
         ax.set_xlim([
             start / self.fs * 1000,
             end / self.fs * 1000
