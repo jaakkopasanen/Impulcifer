@@ -18,6 +18,16 @@ class HRIR:
         self.fs = self.estimator.fs
         self.irs = dict()
 
+    def copy(self):
+        hrir = HRIR(self.estimator)
+        hrir.irs = dict()
+        for speaker, pair in self.irs.items():
+            hrir.irs[speaker] = {
+                'left': pair['left'].copy(),
+                'right': pair['right'].copy()
+            }
+        return hrir
+
     def open_recording(self, file_path, speakers, side=None, silence_length=2.0):
         """Open combined recording and splits it into separate speaker-ear pairs.
 
@@ -239,7 +249,7 @@ class HRIR:
 
         # Crop all tracks by last tail index
         seconds_per_octave = len(self.estimator) / self.estimator.fs / self.estimator.n_octaves
-        fade_out = 2 * int(self.fs * seconds_per_octave * (1 / 24))
+        fade_out = 2 * int(self.fs * seconds_per_octave * (1 / 24))  # Duration of 1/24 octave in the sweep
         window = signal.hanning(fade_out)[fade_out // 2:]
         tail_ind = fftpack.next_fast_len(max(tail_indices))
         for speaker, pair in self.irs.items():

@@ -407,7 +407,7 @@ def write_readme(file_path, hrir, fs):
             _itd = itd if side == 'left' and speaker[1] == 'R' or side == 'right' and speaker[1] == 'L' else 0.0
             # Use the largest decay time parameter available
             peak_ind, knee_point_ind, noise_floor, window_size = ir.decay_params()
-            edt, rt20, rt30, rt60 = ir.decay_times(peak_ind, knee_point_ind)
+            edt, rt20, rt30, rt60 = ir.decay_times(peak_ind, knee_point_ind, noise_floor, window_size)
             if rt60 is not None:
                 rt_name = 'RT60'
                 rt = rt60
