@@ -242,16 +242,19 @@ class HRIR:
                              'estimator\'s sampling rate.')
         # Find indices after which there is only noise in each track
         tail_indices = []
+        lengths = []
         for speaker, pair in self.irs.items():
             for side, ir in pair.items():
                 _, tail_ind, _, _ = ir.decay_params()
                 tail_indices.append(tail_ind)
+                lengths.append(len(ir))
 
         # Crop all tracks by last tail index
         seconds_per_octave = len(self.estimator) / self.estimator.fs / self.estimator.n_octaves
         fade_out = 2 * int(self.fs * seconds_per_octave * (1 / 24))  # Duration of 1/24 octave in the sweep
         window = signal.hanning(fade_out)[fade_out // 2:]
-        tail_ind = fftpack.next_fast_len(max(tail_indices))
+        fft_len = fftpack.next_fast_len(max(tail_indices))
+        tail_ind = min(np.min(lengths), fft_len)
         for speaker, pair in self.irs.items():
             for ir in pair.values():
                 ir.data = ir.data[:tail_ind]
@@ -430,6 +433,7 @@ class HRIR:
                     plot_decay=plot_decay,
                     plot_waterfall=plot_waterfall
                 )
+                fig.suptitle(f'{speaker}-{side}')
                 figs[speaker][side] = fig
 
         # Synchronize axes limits
