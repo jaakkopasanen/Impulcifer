@@ -377,6 +377,13 @@ target level of 0 dB will not mean that the HRIR would not produce clipping. Typ
 negative such as `--target_level=-12.5`. Target level is a tool for having same level for different HRIRs for easier
 comparison.
 
+#### Decay Time Management
+The room decay time (reverb time) captured in the binaural room impulse responses can be shortened with `--decay`
+parameter. The value is a time it should take for the sound to decay by 60 dB in milliseconds. When the natural decay
+time is longer than the given target, the impulse response tails will be shortened with a slope to achieve the desired
+decay velocity. Decay times are not increased if the target is longer than the natural one. The decay time management
+can be a powerful tool for controlling ringing in the room without having to do any physical room treatments.
+
 ## Contact
 [Issues](https://github.com/jaakkopasanen/AutoEq/issues) are the way to go if you are experiencing problems, have
 ideas or if there is something unclear about how things are done or documented.
