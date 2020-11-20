@@ -159,7 +159,7 @@ def open_room_measurements(estimator, dir_path):
     # Read room measurement files
     rir = HRIR(estimator)
     # room-BL,SL.wav, room-left-FL,FR.wav, room-right-FC.wav, etc...
-    pattern = r'^room-{pattern}(-(left|right))?\.wav$'.format(pattern=SPEAKER_LIST_PATTERN)
+    pattern = rf'^room-{SPEAKER_LIST_PATTERN}(-(left|right))?\.wav$'
     for i, file_name in enumerate([f for f in os.listdir(dir_path) if re.match(pattern, f)]):
         # Read the speaker names from the file name into a list
         speakers = re.search(SPEAKER_LIST_PATTERN, file_name)

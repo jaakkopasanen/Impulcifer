@@ -504,11 +504,11 @@ def create_cli():
                                  'responses. "conservative" will take the minimum absolute value for each frequency '
                                  'but only if the values in all the measurements are positive or negative at the same '
                                  'time.')
-    arg_parser.add_argument('--specific_limit', type=float, default=10000,
+    arg_parser.add_argument('--specific_limit', type=float, default=400,
                             help='Upper limit for room equalization with speaker-ear specific room measurements. '
                                  'Equalization will drop down to 0 dB at this frequency in the leading octave. 0 '
                                  'disables limit.')
-    arg_parser.add_argument('--generic_limit', type=float, default=1000,
+    arg_parser.add_argument('--generic_limit', type=float, default=300,
                             help='Upper limit for room equalization with generic room measurements. '
                                  'Equalization will drop down to 0 dB at this frequency in the leading octave. 0 '
                                  'disables limit.')
