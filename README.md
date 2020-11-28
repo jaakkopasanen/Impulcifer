@@ -221,10 +221,11 @@ and `--fr_combination_method=conservative`.
 Upper frequency limit for room measurements can be adjusted with parameters `--specific_limit` and `--generic_limit`.
 These will limit the room correction equalization to 0 dB above that frequency. This can be useful for avoiding pitfalls
 of room correction in high frequencies. `--specific_limit` applies to room measurements which specify the ear and
-`--generic_limit` to room measurements which don't. Typically room dominates the requency response below 300 or 400 Hz
-and speakers dominate above that. Speaker's problems cannot be fixed based on in-room measurements and therefore the
-limits should usually be placed at 300 to 400 Hz. Other, higher, values can be tried out and they can improve the sound
-but there are not guarantees about that.
+`--generic_limit` to room measurements which don't. Typically room dominates the frequency response below 300 or 400 Hz
+and speakers dominate above 700 Hz. Speaker's problems cannot be fixed based on in-room measurements and therefore the
+limits should usually be placed at 700 Hz. The octave leading up to the limit (eg. 350 to 700 Hz) will be sloped down
+from full EQ effect (at 350 Hz) to 0 dB at the limit (700 Hz). Other, higher, values can be tried out and they can
+improve the sound but there are not guarantees about that.
 
 Generic room measurements are not expected to be in the same location as the binaural microphones were so limiting the
 equalization to less than 1 kHz is probably a good idea. Conservative combination method with several measurements is
