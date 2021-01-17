@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+from impulcifer_constants import COLORS
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
@@ -12,7 +13,6 @@ import nnresample
 from copy import deepcopy
 from autoeq.frequency_response import FrequencyResponse
 from utils import magnitude_response, get_ylim, running_mean
-from constants import COLORS
 
 
 class ImpulseResponse:
@@ -469,7 +469,7 @@ class ImpulseResponse:
 
         # Create spectrogram image
         t, f = np.meshgrid(t, f)
-        cs = ax.pcolormesh(t, f, z, cmap='gnuplot2', vmin=-150)
+        cs = ax.pcolormesh(t, f, z, cmap='gnuplot2', vmin=-150, shading='auto')
 
         divider = make_axes_locatable(ax)
         cax = divider.append_axes('right', size='5%', pad=0.05)

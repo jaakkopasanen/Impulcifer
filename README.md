@@ -27,39 +27,43 @@ through installing everything that is needed to run Impulcifer on you own PC.
 
 - Download and install Git: https://git-scm.com/downloads. When installing Git on Windows, use Windows SSL verification
 instead of Open SSL or you might run into problems when installing project dependencies.
-- Download and install 64-bit [Python 3](https://www.python.org/getit/). Python 3.8 doesn't work yet. Make sure to check
-*Add Python 3 to PATH*.
-
-Rest will be done in terminal / command prompt. On Windows you'll find it by searching `cmd` in Start menu.
-You should be able to simply copy and paste in these commands. 
-
-- Install virtualenv. You may need to [install PIP](https://pip.pypa.io/en/stable/installing/).  
+- Download and install 64-bit [Python 3.7](https://www.python.org/getit/). Make sure to check *Add Python 3.7 to PATH*.
+- You may need to install [libsndfile](http://www.mega-nerd.com/libsndfile/) if you're having problems with `soundfile`
+when installing `requirements.txt`.
+- On Linux you may need to install Python dev packages  
 ```bash
-pip install virtualenv
+sudo apt install python3-dev python3-pip python3-venv
 ```
-- Git clone Impulcifer. This will create a folder in your home folder called `Impulcifer`. See [Updating](#updating)
-for other versions than the latest.  
+- On Linux you may need to install [pip](https://pip.pypa.io/en/stable/installing/)
+- On Windows you may need to install
+[Microsoft Visual C++ Redistributable for Visual Studio 2015, 2017, and 2019](https://support.microsoft.com/en-us/help/2977003/the-latest-supported-visual-c-downloads)
+- Open a terminal / command prompt. On Windows, search `cmd` in the start menu.
+- Clone Impulcifer  
 ```bash
-git clone https://github.com/jaakkopasanen/Impulcifer
+git clone https://github.com/jaakkopasanen/Impulcifer.git
 ```
-- Go to Impulcifer folder.  
+- Go to Impulcifer location  
 ```bash
 cd Impulcifer
 ```
-- Create virtual environment for the project.  
+- Create a python virtual environment
 ```bash
-virtualenv venv
+python -m venv venv
 ```
-- Activate virtualenv.  
+- Activate virtualenv  
 ```bash
 # On Windows
-venv\Scripts\activate
-# On Mac and Linux
-source venv/bin/activate
+venv\Scripts\activate.bat
+# On Linux and Mac
+. venv/bin/activate
 ```
-- Install required packages.  
+- Update pip
 ```bash
-pip install -U -r requirements.txt
+python -m pip install -U pip
+```
+- Install required packages  
+```bash
+python -m pip install -U -r requirements.txt
 ```
 - Verify installation. You should see help printed if everything went well.  
 ```bash

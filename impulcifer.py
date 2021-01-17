@@ -13,7 +13,7 @@ from impulse_response_estimator import ImpulseResponseEstimator
 from hrir import HRIR
 from room_correction import room_correction
 from utils import sync_axes, save_fig_as_png
-from constants import SPEAKER_NAMES, SPEAKER_LIST_PATTERN, HESUVI_TRACK_ORDER
+from impulcifer_constants import SPEAKER_NAMES, SPEAKER_LIST_PATTERN, HESUVI_TRACK_ORDER
 
 
 def main(dir_path=None,
@@ -130,6 +130,12 @@ def main(dir_path=None,
                 # Smoothen and equalize
                 fr.smoothen_heavy_light()
                 fr.equalize(max_gain=40, treble_f_lower=10000, treble_f_upper=estimator.fs / 2)
+
+                if plot:
+                    eq_dir = os.path.join(dir_path, 'plots', 'eq')
+                    os.makedirs(eq_dir, exist_ok=True)
+                    fig, _ = fr.plot_graph(show=False, file_path=os.path.join(eq_dir, f'{speaker}-{side}.png'))
+                    plt.close(fig)
 
                 # Create FIR filter and equalize
                 fir = fr.minimum_phase_impulse_response(fs=estimator.fs, normalize=False, f_res=5)
