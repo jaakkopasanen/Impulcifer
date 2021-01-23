@@ -9,7 +9,7 @@ from autoeq.frequency_response import FrequencyResponse
 from impulse_response import ImpulseResponse
 from hrir import HRIR
 from utils import sync_axes, save_fig_as_png, read_wav, get_ylim, config_fr_axis
-from impulcifer_constants import SPEAKER_NAMES, SPEAKER_LIST_PATTERN, IR_ROOM_SPL, COLORS
+from constants import SPEAKER_NAMES, SPEAKER_LIST_PATTERN, IR_ROOM_SPL, COLORS
 
 
 def room_correction(

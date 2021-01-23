@@ -5,7 +5,7 @@ import sys
 import matplotlib.pyplot as plt
 sys.path.insert(1, os.path.realpath(os.path.join(sys.path[0], os.pardir)))
 from utils import read_wav, config_fr_axis, optimize_png_size
-from impulcifer_constants import COLORS
+from constants import COLORS
 from impulse_response import ImpulseResponse
 
 DIR_PATH = os.path.abspath(os.path.join(__file__, os.pardir))

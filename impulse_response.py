@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from impulcifer_constants import COLORS
+from constants import COLORS
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
