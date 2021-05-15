@@ -1,9 +1,8 @@
-matplotlib~=3.1.1
-numpy~=1.17.2
-scipy~=1.3.1
-pyfftw~=0.11.1
+matplotlib~=3.3.3
+numpy~=1.19.5
+scipy~=1.5.4
 soundfile~=0.10.2
 sounddevice~=0.3.14
 nnresample~=0.2.4
 tabulate~=0.8.5
-git+https://github.com/jaakkopasanen/autoeq-pkg@1.2.2
+git+https://github.com/jaakkopasanen/autoeq-pkg@1.2.5#autoeq
