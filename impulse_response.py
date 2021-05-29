@@ -32,8 +32,13 @@ class ImpulseResponse:
         """Impulse response duration in seconds."""
         return len(self) / self.fs
 
-    def peak_index(self, start=0, end=None, peak_height=0.67):
+    def peak_index(self, start=0, end=None, peak_height=0.12589):
         """Finds the first high (negative or positive) peak in the impulse response wave form.
+
+        Args:
+            start: Index for start of search range
+            end: Index for end of search range
+            peak_height: Minimum peak height. Default is -18 dBFS
 
         Returns:
             Peak index to impulse response data
