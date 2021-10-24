@@ -10,6 +10,7 @@ export default class Sweeper {
     this.sweepData = null;
     this.sampleRate = null;
     this.activeSweep = null;
+    this.recorder = null;
     this.channels = ['FL', 'FR', 'FC', 'LFE', 'BL', 'BR', 'SL', 'SR']
     this.initSweepArray = this.initSweepArray.bind(this);
     this.initSweepArray();
@@ -53,5 +54,41 @@ export default class Sweeper {
       this.activeSweep.stop();
       this.activeSweep = null;
     }
+    if (this.recorder) {
+      this.recorder.stop();
+    }
+  }
+
+  async record() {
+    if (navigator.mediaDevices) {
+      const stream = await navigator.mediaDevices.getUserMedia({ 'audio': true }).catch((err) => {
+        alert('Please allow microphone access and try again');
+      });
+
+      console.log('stream');
+      console.log(stream);
+
+      this.recorder = new MediaRecorder(stream);
+      this.recorder.start();
+
+      const chunks = [];
+      this.recorder.ondataavailable = (event) => {
+        chunks.push(event.data);
+      };
+
+      return new Promise(resolve => {
+        this.recorder.onstop = async () => {
+          this.recorder = null;
+          const blob = new Blob(chunks)
+          const buffer = await blob.arrayBuffer();
+          const audioData = this.audioContext.decodeAudioData(buffer);
+          resolve(audioData);
+        };
+      });
+
+    } else {
+      alert('Browser doesn\'t support microphone input');
+    }
+
   }
 }

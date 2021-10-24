@@ -20,8 +20,12 @@ class BRIR extends React.Component {
       this.sweeper.stop();
     } else {
       this.setState({ playing: true });
+      this.sweeper.record().then(recording => {
+        console.log('recording length', recording.getChannelData(0).length / this.sweeper.sampleRate, 's');
+      });
       await this.sweeper.playSequence(['FL', 'FR']);
       this.setState({ playing: false });
+      setTimeout(() => { this.sweeper.stop(); }, 2000);
     }
   };
 
