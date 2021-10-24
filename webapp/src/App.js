@@ -11,9 +11,11 @@ import HeadphoneCompensation from "./HeadphoneCompensation";
 class App extends React.Component {
   constructor(props) {
     super(props);
+
     this.state = {
-      stepName: 'info'
+      stepName: 'brir'
     };
+
     this.steps = [
       {name: 'info', label: 'Info', icon: <InfoIcon />},
       {name: 'levels', label: 'Levels', icon: <EqualizerIcon />},
@@ -21,7 +23,6 @@ class App extends React.Component {
       {name: 'brir', label: 'BRIR', icon: <SpeakerIcon />},
       {name: 'headphoneCompensation', label: 'Headphone Compensation', icon: <HeadsetIcon />},
     ];
-    this.selectStep = this.selectStep.bind(this);
   };
 
   selectStep(stepName) {
@@ -50,11 +51,11 @@ class App extends React.Component {
             })
           }
         </Box>
-        <Box display={stepName === 'info' ? 'flex' : 'none'}><Info /></Box>
-        <Box display={stepName === 'levels' ? 'flex' : 'none'}><Levels /></Box>
-        <Box display={stepName === 'roomCorrection' ? 'flex' : 'none'}><RoomCorrection /></Box>
-        <Box display={stepName === 'brir' ? 'flex' : 'none'}><BRIR /></Box>
-        <Box display={stepName === 'headphoneCompensation' ? 'flex' : 'none'}><HeadphoneCompensation /></Box>
+        {stepName === 'info' && (<Box display="flex"><Info /></Box>)}
+        {stepName === 'levels' && (<Box display="flex"><Levels /></Box>)}
+        {stepName === 'roomCorrection' && (<Box display="flex"><RoomCorrection /></Box>)}
+        {stepName === 'brir' && (<Box display="flex"><BRIR playSweep={this.playSweep}/></Box>)}
+        {stepName === 'headphoneCompensation' && (<Box display="flex"><HeadphoneCompensation /></Box>)}
       </Box>
     )
   };
