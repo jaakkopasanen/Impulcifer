@@ -3,12 +3,14 @@
 export default class Sweeper {
   constructor() {
     this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    this.audioContext.destination.channelCount = this.audioContext.destination.maxChannelCount >= 8 ? 8 : 2;
     this.sweepGain = this.audioContext.createGain();
     this.sweepGain.gain.value = 0.1;
     this.sweepGain.connect(this.audioContext.destination);
     this.sweepData = null;
     this.sampleRate = null;
     this.activeSweep = null;
+    this.channels = ['FL', 'FR', 'FC', 'LFE', 'BL', 'BR', 'SL', 'SR']
     this.initSweepArray = this.initSweepArray.bind(this);
     this.initSweepArray();
     this.playSequence = this.playSequence.bind(this);
@@ -30,10 +32,10 @@ export default class Sweeper {
   playSequence(channelSequence) {
     this.activeSweep = this.audioContext.createBufferSource();
     const length = 2 * this.sampleRate + channelSequence.length * (2 * this.sampleRate + this.sweepData.length);
-    const buffer = this.audioContext.createBuffer(channelSequence.length, length, this.sampleRate);
+    const buffer = this.audioContext.createBuffer(this.channels.length, length, this.sampleRate);
     for (let i = 0; i < channelSequence.length; ++i) {
       const offset = 2 * this.sampleRate + i * (2 * this.sampleRate + this.sweepData.length);
-      buffer.copyToChannel(this.sweepData, i, offset);
+      buffer.copyToChannel(this.sweepData, this.channels.indexOf(channelSequence[i]), offset);
     }
     this.activeSweep.buffer = buffer;
     this.activeSweep.connect(this.sweepGain);
