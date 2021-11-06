@@ -211,9 +211,9 @@ pack(Button(canvas1, text='...', command=lambda: savefile(record)), samerow=True
 
 #force number of channels
 channels_check = BooleanVar()
-channels_checkbutton = Checkbutton(canvas1, text="Force # of channels", variable=channels_check, command=refresh1)
+channels_checkbutton = Checkbutton(canvas1, text="Force input channels", variable=channels_check, command=refresh1)
 pack(channels_checkbutton)
-ToolTip(channels_checkbutton, 'For room correction: some measurement microphones like MiniDSP UMIK-1 are seen as stereo microphones by Windows and will for that reason record a stereo file. recorder.py can force the capture to be one channel')
+ToolTip(channels_checkbutton, 'For room correction: some measurement microphones like MiniDSP UMIK-1 are seen as stereo microphones by Windows and will for that reason record a stereo file. recorder can force the capture to be one channel')
 channels = IntVar(value=1)
 channels_entry = Entry(canvas1, textvariable=channels, width=5, validate='key', vcmd=(root.register(validate_int), '%P'))
 pack(channels_entry, samerow=True)
@@ -536,7 +536,7 @@ decay_entries.append(decay_br)
 #impulcify button
 def impulcifyaction():
 	args = {'dir_path': dir_path.get(), 'test_signal': test_signal.get(), 'plot':plot.get(), 'do_room_correction': do_room_correction.get(), 'do_headphone_compensation':do_headphone_compensation.get(), 'do_equalization':do_equalization.get()}
-	if do_headphone_compensation.get():
+	if do_room_correction.get():
 		args['room_target'] = room_target.get() if room_target.get() else None
 		args['room_mic_calibration'] = room_mic_calibration.get() if room_mic_calibration.get() else None
 		args['specific_limit'] = specific_limit.get()
