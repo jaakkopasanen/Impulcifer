@@ -257,7 +257,7 @@ def refresh2(changedpath=False):
 			if re.search(r"\broom(-[A-Z]{2}(,[A-Z]{2})*-(left|right))?\.wav\b", s, re.I):
 				do_room_correction_msg.set('found room wav')
 				do_room_correction_msg_label.config(foreground='green')
-				do_room_correction.set(True)
+				# do_room_correction.set(True)
 			else:
 				do_room_correction_msg.set('room wav not found!')
 				do_room_correction_msg_label.config(foreground='red')
@@ -265,7 +265,7 @@ def refresh2(changedpath=False):
 			if re.search(r'\bheadphones\.wav\b', s):
 				do_headphone_compensation_msg.set('found headphones wav')
 				do_headphone_compensation_msg_label.config(foreground='green')
-				do_headphone_compensation.set(True)
+				# do_headphone_compensation.set(True)
 			else:
 				do_headphone_compensation_msg.set('headphones wav not found!')
 				do_headphone_compensation_msg_label.config(foreground='red')
@@ -273,7 +273,7 @@ def refresh2(changedpath=False):
 			if re.search(r"\beq(-left|-right)?\.csv\b", s, re.I):
 				do_equalization_msg.set('found eq csv')
 				do_equalization_msg_label.config(foreground='green')
-				do_equalization.set(True)
+				# do_equalization.set(True)
 			else:
 				do_equalization_msg.set('eq csv not found!')
 				do_equalization_msg_label.config(foreground='red')
