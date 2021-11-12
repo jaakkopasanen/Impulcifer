@@ -345,7 +345,7 @@ pack(Button(canvas2, text='...', command=lambda: openfile(test_signal, (('Audio 
 #room correction
 label_pos = {}
 do_room_correction = BooleanVar()
-do_room_correction_checkbutton = Checkbutton(canvas2, text="Room correction ", variable=do_room_correction, command=refresh2)
+do_room_correction_checkbutton = Checkbutton(canvas2, text="Room correction ", variable=do_room_correction, command=lambda: refresh2(changedpath=True))
 ToolTip(do_room_correction_checkbutton, "Do room correction from room measurements in format room-<SPEAKERS>-<left|right>.wav located in your folder; e.g. room-FL,FR-left.wav. Generic measurements are named room.wav")
 pack(do_room_correction_checkbutton)
 do_room_correction_msg = StringVar()
@@ -387,7 +387,7 @@ pack(Button(canvas2, text='...', command=lambda: openfile(room_target, (('Text f
 
 #headphone compensation
 do_headphone_compensation = BooleanVar()
-do_headphone_compensation_checkbutton = Checkbutton(canvas2, text="Headphone compensation ", variable=do_headphone_compensation, command=refresh2)
+do_headphone_compensation_checkbutton = Checkbutton(canvas2, text="Headphone compensation ", variable=do_headphone_compensation, command=lambda: refresh2(changedpath=True))
 ToolTip(do_headphone_compensation_checkbutton, 'Equalize HRIR tracks with headphone compensation measurement headphones.wav')
 pack(do_headphone_compensation_checkbutton)
 do_headphone_compensation_msg = StringVar()
@@ -396,7 +396,7 @@ label_pos[do_headphone_compensation_msg_label] = pack(do_headphone_compensation_
 
 #headphone EQ
 do_equalization = BooleanVar()
-do_equalization_checkbutton = Checkbutton(canvas2, text="Custom EQ", variable=do_equalization, command=refresh2)
+do_equalization_checkbutton = Checkbutton(canvas2, text="Custom EQ", variable=do_equalization, command=lambda: refresh2(changedpath=True))
 ToolTip(do_equalization_checkbutton, 'Read equalization FIR filter or CSV settings from file called eq.csv in your folder. The eq file must be an AutoEQ produced result CSV file. Separate equalizations are supported with files eq-left.csv and eq-right.csv.')
 pack(do_equalization_checkbutton)
 do_equalization_msg = StringVar()
@@ -534,7 +534,7 @@ decay_entries.append(decay_bl)
 decay_entries.append(decay_br)
 
 #impulcify button
-def impulcifyaction():
+def impulcify():
 	args = {'dir_path': dir_path.get(), 'test_signal': test_signal.get(), 'plot':plot.get(), 'do_room_correction': do_room_correction.get(), 'do_headphone_compensation':do_headphone_compensation.get(), 'do_equalization':do_equalization.get()}
 	if do_room_correction.get():
 		args['room_target'] = room_target.get() if room_target.get() else None
@@ -557,7 +557,7 @@ def impulcifyaction():
 	print(args) #debug args
 	impulcifer.main(**args)
 	showinfo('Done!', 'Generated files, check recordings folder.')
-pack(Button(canvas2, text='GENERATE', command=impulcifyaction))
+pack(Button(canvas2, text='GENERATE', command=impulcify))
 
 canvas2.config(width=maxwidth, height=maxheight)
 canvas2.pack()
