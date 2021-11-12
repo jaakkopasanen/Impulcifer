@@ -345,7 +345,7 @@ pack(Button(canvas2, text='...', command=lambda: openfile(test_signal, (('Audio 
 #room correction
 label_pos = {}
 do_room_correction = BooleanVar()
-do_room_correction_checkbutton = Checkbutton(canvas2, text="Room correction ", variable=do_room_correction, command=lambda: refresh2(changedpath=True))
+do_room_correction_checkbutton = Checkbutton(canvas2, text="Room correction ", variable=do_room_correction, command=lambda: refresh2(changedpath=True if do_room_correction.get() else False))
 ToolTip(do_room_correction_checkbutton, "Do room correction from room measurements in format room-<SPEAKERS>-<left|right>.wav located in your folder; e.g. room-FL,FR-left.wav. Generic measurements are named room.wav")
 pack(do_room_correction_checkbutton)
 do_room_correction_msg = StringVar()
@@ -387,7 +387,7 @@ pack(Button(canvas2, text='...', command=lambda: openfile(room_target, (('Text f
 
 #headphone compensation
 do_headphone_compensation = BooleanVar()
-do_headphone_compensation_checkbutton = Checkbutton(canvas2, text="Headphone compensation ", variable=do_headphone_compensation, command=lambda: refresh2(changedpath=True))
+do_headphone_compensation_checkbutton = Checkbutton(canvas2, text="Headphone compensation ", variable=do_headphone_compensation, command=lambda: refresh2(changedpath=True if do_headphone_compensation.get() else False))
 ToolTip(do_headphone_compensation_checkbutton, 'Equalize HRIR tracks with headphone compensation measurement headphones.wav')
 pack(do_headphone_compensation_checkbutton)
 do_headphone_compensation_msg = StringVar()
@@ -396,7 +396,7 @@ label_pos[do_headphone_compensation_msg_label] = pack(do_headphone_compensation_
 
 #headphone EQ
 do_equalization = BooleanVar()
-do_equalization_checkbutton = Checkbutton(canvas2, text="Custom EQ", variable=do_equalization, command=lambda: refresh2(changedpath=True))
+do_equalization_checkbutton = Checkbutton(canvas2, text="Custom EQ", variable=do_equalization, command=lambda: refresh2(changedpath=True if do_equalization.get() else False))
 ToolTip(do_equalization_checkbutton, 'Read equalization FIR filter or CSV settings from file called eq.csv in your folder. The eq file must be an AutoEQ produced result CSV file. Separate equalizations are supported with files eq-left.csv and eq-right.csv.')
 pack(do_equalization_checkbutton)
 do_equalization_msg = StringVar()
