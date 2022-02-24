@@ -1,6 +1,9 @@
 # Microphone Calibration
 Herein lies a tool to calibrate binaural microphones against calibrated measurement microphone such as MiniDSP UMIK-1.
 
+Note - an easy way to perform this calibration is to use Python wizard script: `run_mic_calibration.py` which can be found in the top level of the repository.
+Instructions "How to use" `run_mic_calibration.py` wizard are inside the .py script.
+
 Microphone calibration tool reads exponential sine sweep recordings made with the binaural mics and measurement mic in
 the same physical location. Multiple measurements of both can be done and these will be averaged.
 

@@ -8,13 +8,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 from autoeq.frequency_response import FrequencyResponse
+DIR_PATH = os.path.abspath(os.path.join(__file__, os.pardir))
+sys.path.insert(1, os.path.dirname(os.path.dirname(DIR_PATH)))  # changed to also work in conda Python environments.
 sys.path.insert(1, os.path.realpath(os.path.join(sys.path[0], os.pardir)))
 from impulse_response_estimator import ImpulseResponseEstimator
 from hrir import HRIR
 from utils import optimize_png_size
 
-
-DIR_PATH = os.path.abspath(os.path.join(__file__, os.pardir))
 
 
 def main(test_signal):
