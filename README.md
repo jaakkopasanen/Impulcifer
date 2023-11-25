@@ -275,7 +275,7 @@ result of the headphone which was used to make the headphone compensation record
 For example if the headphone compensation recording was made with Sennheiser HD 650 and you want to enjoy Impulcifer
 produced BRIR with Campfire Andromeda, you should run:
 ```bash
-python frequency_response.py --input_dir="oratory1990/data/inear/Campfire Audio Andromeda" --output_dir="my_results/Andromeda (HD 650)" --compensation="compensation/harman_over-ear_2018_wo_bass.csv" --sound_signature="results/oratory1990/harman_over-ear_2018/Sennheiser HD 650/Sennheiser HD 650.csv" --equalize --bass_boost=4 --max_gain=6
+python -m autoeq --input-file="measurements/oratory1990/data/in-ear/Campfire Audio Andromeda.csv" --output-dir="my-results/Andromeda (HD 650)" --target="targets/AutoEq in-ear.csv" --sound-signature="results/oratory1990/over-ear/Sennheiser HD 650/Sennheiser HD 650.csv" --equalize --bass-boost=8 --max-gain=12
 ```
 and then copy `AutoEq/my_results/Andromeda (HD 650)/Campfire Audio Andromeda.csv` to `Impulcifer/data/my_hrir/eq.csv`.
 
